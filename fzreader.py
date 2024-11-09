@@ -18,6 +18,12 @@ class FZReader:
         if self.file:
             self.file.close()
 
+    def _nio(self, iocb):
+        if(iocb < 12):
+            return 1;
+        else:
+            return iocb&0xFFFF - 12;
+
     def _read_pdata(self):
         self.pdata = self.file.read(4*4)
         if(len(self.pdata) == 0):
@@ -86,12 +92,14 @@ class FZReader:
 
         return NWLR,LRTYP,ldata
     
-    def read(self):
-        LRTYP = 1
+    def _read_udata(self):
+        LRTYP = 0
         while(LRTYP!=2 and LRTYP!=3):
             NWLR,LRTYP,ldata = self._read_ldata()
+            if(not ldata):
+                return None, None, None, None, None, None, None
             if(LRTYP==4):
-                raise RuntimeError('ZEBRA logical packet type 4 not supoprted, please contact Stephen Fegan')
+                raise RuntimeError('ZEBRA logical extension found where start expected')
             if(self.verbose and LRTYP!=2 and LRTYP!=3):
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)")
 
@@ -100,16 +108,149 @@ class FZReader:
         magic,QVERSIO,opt,zero,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = struct.unpack('>IIIIIIIIII',ldata[0:40])
         if(magic!=0x4640e400):
             raise RuntimeError('ZEBRA logical record MAGIC not found')
+        NWBKST = NWLR - (10 + NWUHIO + NWSEG + NWTX + NWTAB)
+
+        if(self.verbose):
+            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO},  NWBKST={NWBKST}, len={len(ldata)}")
+
+        while(NWBKST<NWBK):
+            NWLR,LRTYP,xldata = self._read_ldata()
+            if(not ldata):
+                raise RuntimeError('ZEBRA end of file while searching for logical extension')
+            if(LRTYP==2 or LRTYP==3):
+                raise RuntimeError('ZEBRA logical start found where extension expected')
+            if(LRTYP==4):
+                ldata += xldata
+                NWBKST += NWLR
+                if(self.verbose):
+                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}")
+            elif(self.verbose):
+                print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)")
+
+        if(NWBKST != NWBK):
+            raise RuntimeError('ZEBRA number of bank words found does not match expected')
 
         if(NWUHIO!=0):
             if(len(ldata)<44):
-                raise RuntimeError('ZEBRA logical record does not have NWIO')
-            NWIO, = struct.unpack('>I',ldata[40:44])
+                raise RuntimeError('ZEBRA logical record does not have user header IO control words')
+            UHIOCW, = struct.unpack('>I',ldata[40:44])
+            NWIO = self._nio(UHIOCW)
         else:
+            UHIOCW=0
             NWIO=0
         NWUH = NWUHIO-NWIO
         NWBKST = NWLR - (10 + NWIO + NWUH + NWSEG + NWTX + NWTAB)
-        if(self.verbose):
-            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO}, NWUH={NWUH}, NWIO={NWIO}, NWBKST={NWBKST}")
 
-        return NWLR,LRTYP,ldata
+        return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[(10+NWIO)*4:]
+
+    def read(self):
+        NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, udata = self._read_udata()
+
+        if(not udata):
+            return None
+
+        runno = 0
+        eventno = 0
+
+        DSS = 0
+
+        if(NWUH>0):
+            if(self.verbose):
+                print(f"UH:",end="")
+                for i in range(NWUH):
+                    x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                    if(i):
+                        print(",",end="")
+                    print(f" UH({i})={x}",end="")
+                print()
+            if(NWUH==2):
+                runno, eventno = struct.unpack('>II',udata[DSS:DSS+8])
+        DSS += NWUH
+
+        if(self.verbose and NWSEG>0):
+            print(f"ST:",end="")
+            for i in range(NWSEG):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="")
+                print(f" ST({i})={x}",end="")
+            print()
+        DSS += NWSEG
+
+        if(self.verbose and NWTX>0):
+            print(f"TV:",end="")
+            for i in range(NWTX):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="")
+                print(f" TV({i})={x}",end="")
+            print()
+        DSS += NWTX
+
+        if(self.verbose and NWTAB>0):
+            print(f"RT:",end="")
+            for i in range(NWTAB):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="")
+                print(f" RT({i})={x}",end="")
+            print()
+        DSS += NWTAB
+
+        IOCB, = struct.unpack('>I',udata[DSS*4:(DSS+1)*4])
+        NIO = self._nio(IOCB)
+        DSS += 1+NIO
+
+        NXTPTR,UPPTR,ORIGPTR,NBID,HBID,NLINK,NSTRUCLINK,NDW,STATUS = struct.unpack('>IIIIIIIII',udata[DSS*4:(DSS+9)*4])
+        DSS += 9
+
+        if(self.verbose):
+            HBID_str = struct.pack('I',HBID).decode("utf-8")
+            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}")
+
+        if(HBID == 0x45545445): # ETTE - 10m event bank
+            return self._decode_ette(NDW, udata[DSS*4:])
+        
+        return None
+
+    def _decode_ette(self, NDW, data):
+        for i in range(min(NDW,64)):
+            x,  = struct.unpack('>I',data[i*4:(i+1)*4])
+            print(f"  {x:10d}",end='')
+            if(i%8==7):
+                print()
+
+        nadc, run_num, event_num, livetime_sec, livetime_ns = struct.unpack('>5I',data[28:48])
+        elaptime_sec, elaptime_ns, grs_day, grs_time, grs_time_10ns = struct.unpack('>5I',data[84:104])
+
+#   int    trigger       = record.trigger;
+#   int    grs_day       = record.grs_clock[2];
+#   int    grs_time      = record.grs_clock[1];
+#   int    grs_time_10ns = record.grs_clock[0];
+#   int    status        = record.status; // what is this ?
+
+        utc_time = (float(((grs_time&0x00F00000) >> 20)*60*60*10 +
+	                     ((grs_time&0x000F0000) >> 16)*60*60 +
+	                     ((grs_time&0x0000F000) >> 12)*60*10 +
+	                     ((grs_time&0x00000F00) >> 8)*60 +
+	                     ((grs_time&0x000000F0) >> 4)*10 +
+	                     ((grs_time&0x0000000F) >> 0)) +
+                   float(grs_time_10ns)/100000000.0)
+
+        ev = dict(
+            type            = 'event',
+            nadc            = nadc,
+            run_num         = run_num, 
+            event_num       = event_num, 
+            livetime_sec    = livetime_sec, 
+            livetime_ns     = livetime_ns,
+            elaptime_sec    = elaptime_sec,
+            elaptime_ns     = elaptime_ns,
+            grs_data        = [ grs_day, grs_time, grs_time_10ns ],
+            mjd_date        = grs_day,
+            utc_time        = utc_time,
+            utc_time_str    = f'{grs_time:06x}'
+        )
+        print(ev)
+        return ev
+    
