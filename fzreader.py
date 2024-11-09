@@ -214,20 +214,23 @@ class FZReader:
         return None
 
     def _decode_ette(self, NDW, data):
-        for i in range(min(NDW,64)):
+        for i in range(min(NDW,1000)):
             x,  = struct.unpack('>I',data[i*4:(i+1)*4])
+            if(i%8==0):
+                print(f'{i*4:4d} |',end='')
             print(f"  {x:10d}",end='')
             if(i%8==7):
                 print()
+        if(NDW%8!=7):
+            print()
+
+        gdf_version, = struct.unpack('>I',data[0:4])
+        if(gdf_version != 83):
+            raise RuntimeError(f'Only GDF version 83 is supported (this file is version {gdf_version})')
 
         nadc, run_num, event_num, livetime_sec, livetime_ns = struct.unpack('>5I',data[28:48])
         elaptime_sec, elaptime_ns, grs_day, grs_time, grs_time_10ns = struct.unpack('>5I',data[84:104])
-
-#   int    trigger       = record.trigger;
-#   int    grs_day       = record.grs_clock[2];
-#   int    grs_time      = record.grs_clock[1];
-#   int    grs_time_10ns = record.grs_clock[0];
-#   int    status        = record.status; // what is this ?
+        trigger, = struct.unpack('>I',data[112:116])
 
         utc_time = (float(((grs_time&0x00F00000) >> 20)*60*60*10 +
 	                     ((grs_time&0x000F0000) >> 16)*60*60 +
@@ -238,7 +241,7 @@ class FZReader:
                    float(grs_time_10ns)/100000000.0)
 
         ev = dict(
-            type            = 'event',
+            packet_type     = 'event',
             nadc            = nadc,
             run_num         = run_num, 
             event_num       = event_num, 
@@ -248,8 +251,9 @@ class FZReader:
             elaptime_ns     = elaptime_ns,
             grs_data        = [ grs_day, grs_time, grs_time_10ns ],
             mjd_date        = grs_day,
-            utc_time        = utc_time,
-            utc_time_str    = f'{grs_time:06x}'
+            utc_time_sec    = utc_time,
+            utc_time_str    = f'{grs_time:06x}',
+            event_type      = 'pedestal' if trigger==1 else 'physics'
         )
         print(ev)
         return ev
