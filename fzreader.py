@@ -4,14 +4,13 @@ class FZReader:
     def __init__(self, filename, verbose=False) -> None:
         self.filename = filename
         self.file = None
-        self.pdata = b''
-        self.NWTOLR = 0
+        self.saved_pdata = b''
         self.verbose = verbose
         pass
 
     def __enter__(self):
         self.file = open(self.filename, 'rb')
-        self.pdata = b''
+        pdata = b''
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -25,68 +24,74 @@ class FZReader:
             return iocb&0xFFFF - 12;
 
     def _read_pdata(self):
-        self.pdata = self.file.read(4*4)
-        if(len(self.pdata) == 0):
-            return
-        if(len(self.pdata) != 16):
+        pdata = self.file.read(4*4)
+        if(len(pdata) == 0):
+            return None, None # EOF
+        if(len(pdata) != 16):
             raise RuntimeError('ZEBRA physical record MAGIC could not be read')
-        if(struct.unpack('>IIII',self.pdata) != (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)):
+        if(struct.unpack('>IIII',pdata) != (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)):
             raise RuntimeError('ZEBRA physical record MAGIC not found')
 
-        self.pdata = self.file.read(4*4)
-        if(len(self.pdata) != 16):
+        pdata = self.file.read(4*4)
+        if(len(pdata) != 16):
             raise RuntimeError('ZEBRA physical record header could not be read')
-        NWPHR, PRC, self.NWTOLR, NFAST = struct.unpack('>IIII',self.pdata)
+        NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
-            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={self.NWTOLR}, NFAST={NFAST}")
+            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR=NWTOLR, NFAST={NFAST}")
 
-        self.pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
-        if(len(self.pdata) != (NWPHR*(1+NFAST)-8)*4):
+        pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
+        if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
             raise RuntimeError('ZEBRA physical packet data could not be read')
+
+        return NWTOLR, pdata
 
     def _read_ldata(self):
         ldata = b''
         NWLR = 0
         LRTYP = 0
-
         while(NWLR == 0):
-            if(not self.pdata):
-                self._read_pdata()
-                if(not self.pdata):
-                    return None,None,None     
+            if(self.saved_pdata):
+                pdata = self.saved_pdata
+                self.saved_pdata = b''
+            else:
+                NWTOLR, pdata = self._read_pdata()
+                if(not pdata):
+                    return None,None,None
+                if(NWTOLR != 8):
+                    raise RuntimeError('ZEBRA physical packet has unexpected data before logical record')
         
-            if(len(self.pdata) == 4):
-                NWLR = struct.unpack('>I',self.pdata[0:4])[0]
+            if(len(pdata) == 4):
+                NWLR = struct.unpack('>I',pdata[0:4])[0]
                 if(NWLR != 0):
                     raise RuntimeError('ZEBRA logical record size error:',NWLR)
-                self.pdata = b''
+                pdata = b''
                 continue
 
-            NWLR, LRTYP = struct.unpack('>II',self.pdata[0:8])
+            NWLR, LRTYP = struct.unpack('>II',pdata[0:8])
             if(NWLR == 0):
-                self.pdata = self.pdata[4:]
+                pdata = pdata[4:]
                 continue
-            elif(NWLR*4 < len(self.pdata)-8):
-                ldata = self.pdata[8:NWLR*4+8]
-                self.pdata = self.pdata[NWLR*4+8:]
+            elif(LRTYP == 5 or LRTYP == 6):
+                # Skip padding records - assume these are only at end of PR
+                NWLR = 0
+            elif(NWLR*4 < len(pdata)-8):
+                ldata = pdata[8:NWLR*4+8]
+                self.saved_pdata = pdata[NWLR*4+8:]
             else:
-                ldata = self.pdata[8:]
-                self.pdata = b''
+                ldata = pdata[8:]
 
-        while(NWLR*4!=len(ldata)):
-            if(not self.pdata):
-                self._read_pdata()
-                if(not self.pdata):
-                    raise RuntimeError('ZEBRA file EOF with incomplete logical packet')
+        while(NWLR*4>len(ldata)):
+            NWTOLR, pdata = self._read_pdata()
+            if(not pdata):
+                raise RuntimeError('ZEBRA file EOF with incomplete logical packet')
 
-            if(self.NWTOLR == 0):
-                ldata += self.pdata
-                self.pdata = b''
+            if(NWTOLR == 0):
+                ldata += pdata
                 continue
-            elif(self.NWTOLR>8):
-                ldata += self.pdata[0:(self.NWTOLR-8)*4]
-                self.pdata = self.pdata[(self.NWTOLR-8)*4:]
+            elif(NWTOLR>8):
+                ldata += pdata[0:(NWTOLR-8)*4]
+                self.saved_pdata = pdata[(NWTOLR-8)*4:]
             else:
                 raise RuntimeError('ZEBRA new logical packet while processing incomplete logical packet')
 
@@ -144,6 +149,10 @@ class FZReader:
         return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[(10+NWIO)*4:]
 
     def read(self):
+        if(self.verbose):
+            print('-'*80)
+            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}')
+
         NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, udata = self._read_udata()
 
         if(not udata):
@@ -208,12 +217,19 @@ class FZReader:
             HBID_str = struct.pack('I',HBID).decode("utf-8")
             print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}")
 
+        if(self.verbose=='max'):
+            self._print_record(NDW, udata[DSS*4:])
+
         if(HBID == 0x45545445): # ETTE - 10m event bank
             return self._decode_ette(NDW, udata[DSS*4:])
+        elif(HBID == 0x52555552): # RUUR - Run header
+            return self._decode_ruur(NDW, udata[DSS*4:])
+        elif(HBID == 0x48565648): # HVVH - High voltage settings
+            return self._decode_hvvh(NDW, udata[DSS*4:])
         
-        return None
+        return dict(record_type     = 'unknown')
 
-    def _decode_ette(self, NDW, data):
+    def _print_record(self, NDW, data):
         for i in range(min(NDW,1000)):
             x,  = struct.unpack('>I',data[i*4:(i+1)*4])
             if(i%8==0):
@@ -223,14 +239,64 @@ class FZReader:
                 print()
         if(NDW%8!=7):
             print()
+        return
 
+    def _unpack_block(self, NFIRST, NDW, data, datum_code, datum_len):
+        if(NFIRST >= NDW):
+            raise RuntimeError(f'GDF bank data does not have block header: {NFIRST} >= {NDW}')
+        block_header, = struct.unpack('>I',data[NFIRST*4:(NFIRST+1)*4])
+        NW = block_header>>4
+        if(NFIRST+NW >= NDW):
+            raise RuntimeError(f'GDF bank data does not have full block: {NFIRST+NW} >= {NDW}')
+        FMT = f'>{NW*4//datum_len}{datum_code}'
+        block_values = struct.unpack(FMT,data[(NFIRST+1)*4:(NFIRST+1+NW)*4])
+        if(self.verbose):
+            print(f"BBH: NW={NW}")
+        return NW+1, block_values
+    
+    def _unpack_block_I32(self, NFIRST, NDW, data):
+        return self._unpack_block(NFIRST, NDW, data, 'I', 4)
+
+    def _unpack_block_I16(self, NFIRST, NDW, data):
+        return self._unpack_block(NFIRST, NDW, data, 'H', 2)
+
+    def _unpack_block_F32(self, NFIRST, NDW, data):
+        return self._unpack_block(NFIRST, NDW, data, 'f', 4)
+
+    def _unpack_block_F64(self, NFIRST, NDW, data):
+        return self._unpack_block(NFIRST, NDW, data, 'd', 8)
+
+    def _unpack_block_S(self, NFIRST, NDW, data):
+        return self._unpack_block(NFIRST, NDW, data, 's', 1)
+
+    def _unpack_gdf_header(self, data):
         gdf_version, = struct.unpack('>I',data[0:4])
-        if(gdf_version != 83):
-            raise RuntimeError(f'Only GDF version 83 is supported (this file is version {gdf_version})')
+        if(gdf_version < 74):
+            raise RuntimeError(f'Only GDF versions >=74 are supported (this file is version {gdf_version})')
+        NW = 6 # It's 7 in the GDF FORTRAN code.. but they start from 1
+        return NW, gdf_version
+        
+    def _decode_ette(self, NDW, data):
+        NFIRST, gdf_version = self._unpack_gdf_header(data)
 
-        nadc, run_num, event_num, livetime_sec, livetime_ns = struct.unpack('>5I',data[28:48])
-        elaptime_sec, elaptime_ns, grs_day, grs_time, grs_time_10ns = struct.unpack('>5I',data[84:104])
-        trigger, = struct.unpack('>I',data[112:116])
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
+        npst, elaptime_sec, elaptime_ns, grs_day, grs_time, grs_time_10ns = block_values[13:19]
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        trigger = block_values[0]
+
+        pst_data = ()
+        if(npst>0):
+            NW, pst_data = self._unpack_block_I32(NFIRST, NDW, data)
+            NFIRST += NW
+
+        adc_data = ()
+        if(nadc>0):
+            NW, adc_data = self._unpack_block_I16(NFIRST, NDW, data)
+            NFIRST += NW
 
         utc_time = (float(((grs_time&0x00F00000) >> 20)*60*60*10 +
 	                     ((grs_time&0x000F0000) >> 16)*60*60 +
@@ -241,8 +307,9 @@ class FZReader:
                    float(grs_time_10ns)/100000000.0)
 
         ev = dict(
-            packet_type     = 'event',
+            record_type    = 'event',
             nadc            = nadc,
+            npst            = npst,
             run_num         = run_num, 
             event_num       = event_num, 
             livetime_sec    = livetime_sec, 
@@ -253,8 +320,89 @@ class FZReader:
             mjd_date        = grs_day,
             utc_time_sec    = utc_time,
             utc_time_str    = f'{grs_time:06x}',
-            event_type      = 'pedestal' if trigger==1 else 'physics'
+            event_type      = 'pedestal' if trigger==1 else 'sky',
+            pst_data        = pst_data,
+            adc_data        = adc_data
         )
-        print(ev)
         return ev
-    
+
+    def _decode_ruur(self, NDW, data):
+        NFIRST, gdf_version = self._unpack_gdf_header(data)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
+        NFIRST += NW
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        run_num = block_values[3]
+        sky_quality = block_values[5]
+        comment_len = block_values[12]
+
+        NW, block_values = self._unpack_block_F32(NFIRST, NDW, data)
+        NFIRST += NW
+        trigger_mode = block_values[:2]
+
+        NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
+        NFIRST += NW
+        nominal_utc_start, nominal_utc_end = block_values
+
+        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
+        observers = block_values[0][80:].decode('ascii')
+        NFIRST += NW
+
+        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
+        comment = block_values[0].decode('ascii')
+        NFIRST += NW
+
+        rh = dict(
+            record_type         = 'run',
+            run_num             = run_num, 
+            sky_quality         = chr(64+sky_quality),
+            trigger_mode        = trigger_mode,
+            nominal_utc_start   = nominal_utc_start,
+            nominal_utc_end     = nominal_utc_end,
+            observers           = observers.strip(),
+            comment             = comment.strip()
+        )
+        return rh
+
+    def _decode_hvvh(self, NDW, data):
+        NFIRST, gdf_version = self._unpack_gdf_header(data)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        _, mode, num_channels, read_cycle = block_values
+
+        status = ()
+        v_set = ()
+        v_actual = ()
+        i_supply = ()
+        i_anode = ()
+        if(num_channels > 0):
+            NW, status = self._unpack_block_I16(NFIRST, NDW, data)
+            NFIRST += NW
+
+            NW, v_set = self._unpack_block_F32(NFIRST, NDW, data)
+            NFIRST += NW
+
+            NW, v_actual = self._unpack_block_F32(NFIRST, NDW, data)
+            NFIRST += NW
+
+            NW, i_supply = self._unpack_block_F32(NFIRST, NDW, data)
+            NFIRST += NW
+
+            NW, i_anode = self._unpack_block_F32(NFIRST, NDW, data)
+            NFIRST += NW
+
+        hv = dict(
+            record_type         = 'hv',
+            mode                = mode,
+            num_channels        = num_channels,
+            read_cycle          = read_cycle,
+            status              = status,
+            v_set               = v_set,
+            v_actual            = v_actual,
+            i_supply            = i_supply,
+            i_anode             = i_anode
+        )
+        return hv
