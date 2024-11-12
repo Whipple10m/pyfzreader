@@ -322,14 +322,14 @@ class FZReader:
         NFIRST += NW
         trigger = block_values[0]
 
-        pst_data = ()
+        pst_patterns = ()
         if(npst>0):
-            NW, pst_data = self._unpack_block_I32(NFIRST, NDW, data)
+            NW, pst_patterns = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
 
-        adc_data = ()
+        adc_values = ()
         if(nadc>0):
-            NW, adc_data = self._unpack_block_I16(NFIRST, NDW, data)
+            NW, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
             NFIRST += NW
 
         utc_time = (float(((grs_time&0x00F00000) >> 20)*60*60*10 +
@@ -355,8 +355,8 @@ class FZReader:
             utc_time_sec    = utc_time,
             utc_time_str    = f'{grs_time:06x}',
             event_type      = 'pedestal' if trigger==1 else 'sky',
-            pst_data        = pst_data,
-            adc_data        = adc_data
+            pst_patterns    = pst_patterns,
+            adc_values      = adc_values
         )
         return ev
 
