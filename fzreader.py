@@ -1,3 +1,37 @@
+# fzreader.py - Stephen Fegan - 2024-11-08
+#
+# Read Whipple 10m data in GDF/ZEBRA format into Python
+#
+# The Granite data format (GDF) uses the CERN ZEBRA package to store Whipple
+# events in data banks. ZEBRA consists of three layers : physical, logical and
+# data bank, each of which have headers that must be decoded. The ZEBRA format
+# is described by "Overview of the ZEBRA System" (CERN Program Library Long 
+# Writeups Q100/Q101), and in particular Chapter 10 describes the layout of the
+# headers and data in "exchange mode".
+# 
+# https://cds.cern.ch/record/2296399/files/zebra.pdf
+#
+# Inside the data banks, the GDF code, written by Glenn Sembrowski at Purdue,
+# directs the writing of the individual data elements in blocks of data all of
+# whom have the same data type (blocks of I32, blocks of I16 etc.). See for 
+# example the function GDF$EVENT10 and observe the calls to GDF$MOVE
+#
+# https://github.com/Whipple10m/GDF/blob/main/gdf.for
+#
+# Copyright 2024, Stephen Fegan <sfegan@llr.in2p3.fr>
+# Laboratoire Leprince-Ringuet, CNRS/IN2P3, Ecole Polytechnique, Institut Polytechnique de Paris
+#
+# This file is part of "fzreader"
+#
+# "fzreader" is free software: you can redistribute it and/or modify it under the
+# terms of the GNU General Public License version 2 or later, as published by
+# the Free Software Foundation.
+#
+# "fzreader" is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+# A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+
 import struct
 
 class FZReader:
