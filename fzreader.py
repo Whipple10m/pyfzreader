@@ -11,7 +11,7 @@
 # 
 # https://cds.cern.ch/record/2296399/files/zebra.pdf
 #
-# Inside the data banks, the GDF code, written by Glenn Sembrowski at Purdue,
+# Inside the data banks, the GDF code, written by Joachim Rose at Leeds,
 # directs the writing of the individual data elements in blocks of data all of
 # whom have the same data type (blocks of I32, blocks of I16 etc.). See for 
 # example the function GDF$EVENT10 and observe the calls to GDF$MOVE
@@ -254,14 +254,17 @@ class FZReader:
         if(self.verbose=='max'):
             self._print_record(NDW, udata[DSS*4:])
 
-        if(HBID == 0x45545445): # ETTE - 10m event bank
+        if(HBID == 0x45545445): # ETTE - 10m event
             return self._decode_ette(NDW, udata[DSS*4:])
         elif(HBID == 0x52555552): # RUUR - Run header
             return self._decode_ruur(NDW, udata[DSS*4:])
         elif(HBID == 0x48565648): # HVVH - High voltage settings
             return self._decode_hvvh(NDW, udata[DSS*4:])
-        
-        return dict(record_type     = 'unknown')
+        elif(HBID == 0x46545446): # FTTF - 10m frame
+            return self._decode_fttf(NDW, udata[DSS*4:])
+
+        return dict(record_type     = 'unknown',
+                    bank_id         = struct.pack('I',HBID).decode("utf-8"))
 
     def _print_record(self, NDW, data):
         for i in range(min(NDW,1000)):
@@ -284,7 +287,9 @@ class FZReader:
             raise RuntimeError(f'GDF bank data does not have full block: {NFIRST+NW} >= {NDW}')
         FMT = f'>{NW*4//datum_len}{datum_code}'
         block_values = struct.unpack(FMT,data[(NFIRST+1)*4:(NFIRST+1+NW)*4])
-        if(self.verbose):
+        if(self.verbose=='max' or self.verbose=='bank'):
+            print(f"BBH: NW={NW}",block_values)
+        elif(self.verbose):
             print(f"BBH: NW={NW}")
         return NW+1, block_values
     
@@ -303,28 +308,33 @@ class FZReader:
     def _unpack_block_S(self, NFIRST, NDW, data):
         return self._unpack_block(NFIRST, NDW, data, 's', 1)
 
-    def _unpack_gdf_header(self, data):
+    def _unpack_gdf_header(self, data, min_version=1):
         gdf_version, = struct.unpack('>I',data[0:4])
-        if(gdf_version < 74):
-            raise RuntimeError(f'Only GDF versions >=74 are supported (this file is version {gdf_version})')
+        if(gdf_version < min_version):
+            raise RuntimeError(f'Only GDF versions >={min_version} are supported (this file is version {gdf_version})')
         NW = 6 # It's 7 in the GDF FORTRAN code.. but they start from 1
         return NW, gdf_version
-        
+    
+    def _bytes_to_string(self, bytes_string):
+        return ''.join(chr(b) for b in bytes_string if (32 <= b <= 126) or b in (9, 10, 13))
+
     def _decode_ette(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data)
+        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=74)
+        record_time_mjd, = struct.unpack('>d',data[16:24])
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
         nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
-        npst, elaptime_sec, elaptime_ns, grs_day, grs_time, grs_time_10ns = block_values[13:19]
+        ntrigger, elaptime_sec, elaptime_ns = block_values[13:16]
+        grs_time_10MHz, grs_time, grs_day = block_values[16:19]
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
         trigger = block_values[0]
 
-        pst_patterns = ()
-        if(npst>0):
-            NW, pst_patterns = self._unpack_block_I32(NFIRST, NDW, data)
+        trigger_data = ()
+        if(ntrigger>0):
+            NW, trigger_data = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
 
         adc_values = ()
@@ -332,36 +342,40 @@ class FZReader:
             NW, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
             NFIRST += NW
 
-        utc_time = (float(((grs_time&0x00F00000) >> 20)*60*60*10 +
-	                     ((grs_time&0x000F0000) >> 16)*60*60 +
-	                     ((grs_time&0x0000F000) >> 12)*60*10 +
-	                     ((grs_time&0x00000F00) >> 8)*60 +
-	                     ((grs_time&0x000000F0) >> 4)*10 +
-	                     ((grs_time&0x0000000F) >> 0)) +
-                   float(grs_time_10ns)/100000000.0)
+        grs_utc_isec = ((grs_time&0x00F00000) >> 20)*36000 + \
+                       ((grs_time&0x000F0000) >> 16)*3600 + \
+                       ((grs_time&0x0000F000) >> 12)*600 + \
+                       ((grs_time&0x00000F00) >> 8)*60 + \
+                       ((grs_time&0x000000F0) >> 4)*10 + \
+                       ((grs_time&0x0000000F) >> 0)
+        
+        grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
 
+        grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
+        
         ev = dict(
-            record_type    = 'event',
-            nadc            = nadc,
-            npst            = npst,
-            run_num         = run_num, 
-            event_num       = event_num, 
-            livetime_sec    = livetime_sec, 
-            livetime_ns     = livetime_ns,
-            elaptime_sec    = elaptime_sec,
-            elaptime_ns     = elaptime_ns,
-            grs_data        = [ grs_day, grs_time, grs_time_10ns ],
-            mjd_date        = grs_day,
-            utc_time_sec    = utc_time,
-            utc_time_str    = f'{grs_time:06x}',
-            event_type      = 'pedestal' if trigger==1 else 'sky',
-            pst_patterns    = pst_patterns,
-            adc_values      = adc_values
+            record_type         = 'event',
+            record_time_mjd     = record_time_mjd,
+            gdf_version         = gdf_version,
+            nadc                = nadc,
+            ntrigger            = ntrigger,
+            run_num             = run_num, 
+            event_num           = event_num, 
+            livetime_sec        = livetime_sec, 
+            livetime_ns         = livetime_ns,
+            elaptime_sec        = elaptime_sec,
+            elaptime_ns         = elaptime_ns,
+            grs_data            = [ grs_time_10MHz, grs_time, grs_day ],
+            grs_utc_time_sec    = grs_utc_time_sec,
+            grs_utc_time_str    = grs_utc_time_str,
+            event_type          = 'pedestal' if trigger==1 else 'sky',
+            trigger_data        = trigger_data,
+            adc_values          = adc_values
         )
         return ev
 
     def _decode_ruur(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data)
+        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=27)
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
@@ -381,17 +395,18 @@ class FZReader:
         nominal_utc_start, nominal_utc_end = block_values
 
         NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-        observers = block_values[0][80:].decode('ascii')
         NFIRST += NW
+        observers = self._bytes_to_string(block_values[0][80:])
 
         NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-        comment = block_values[0].decode('ascii')
         NFIRST += NW
+        comment = self._bytes_to_string(block_values[0])
 
         rh = dict(
             record_type         = 'run',
+            gdf_version         = gdf_version,
             run_num             = run_num, 
-            sky_quality         = chr(64+sky_quality),
+            sky_quality         = chr(64+sky_quality) if (sky_quality>0 and sky_quality<3) else '?',
             trigger_mode        = trigger_mode,
             nominal_utc_start   = nominal_utc_start,
             nominal_utc_end     = nominal_utc_end,
@@ -401,7 +416,7 @@ class FZReader:
         return rh
 
     def _decode_hvvh(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data)
+        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=67)
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
@@ -430,6 +445,7 @@ class FZReader:
 
         hv = dict(
             record_type         = 'hv',
+            gdf_version         = gdf_version,
             mode                = mode,
             num_channels        = num_channels,
             read_cycle          = read_cycle,
@@ -440,3 +456,20 @@ class FZReader:
             i_anode             = i_anode
         )
         return hv
+
+    def _decode_fttf(self, NDW, data):
+        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=80)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        print(block_values)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        print(block_values)
+
+        frame = dict(
+            record_type         = 'frame',
+            gdf_version         = gdf_version,
+        )
+        return frame
