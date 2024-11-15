@@ -42,6 +42,7 @@ class FZReader:
         self.file = None
         self.saved_pdata = b''
         self.verbose = verbose
+        self.vstream = sys.stdout
         pass
 
     def __enter__(self):
@@ -74,7 +75,7 @@ class FZReader:
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
-            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR=NWTOLR, NFAST={NFAST}")
+            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR=NWTOLR, NFAST={NFAST}",file=self.vstream)
 
         pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
@@ -142,7 +143,7 @@ class FZReader:
             if(LRTYP==4):
                 raise RuntimeError('ZEBRA logical extension found where start expected')
             if(self.verbose and LRTYP!=2 and LRTYP!=3):
-                print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)")
+                print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(len(ldata)<40):
             raise RuntimeError('ZEBRA logical record too short for header')
@@ -152,7 +153,7 @@ class FZReader:
         NWBKST = NWLR - (10 + NWUHIO + NWSEG + NWTX + NWTAB)
 
         if(self.verbose):
-            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO},  NWBKST={NWBKST}, len={len(ldata)}")
+            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO},  NWBKST={NWBKST}, len={len(ldata)}",file=self.vstream)
 
         while(NWBKST<NWBK):
             NWLR,LRTYP,xldata = self._read_ldata()
@@ -164,9 +165,9 @@ class FZReader:
                 ldata += xldata
                 NWBKST += NWLR
                 if(self.verbose):
-                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}")
+                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}",file=self.vstream)
             elif(self.verbose):
-                print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)")
+                print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(NWBKST != NWBK):
             raise RuntimeError('ZEBRA number of bank words found does not match expected')
@@ -186,8 +187,8 @@ class FZReader:
 
     def read(self):
         if(self.verbose):
-            print('-'*80)
-            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}')
+            print('-'*80,file=self.vstream)
+            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}',file=self.vstream)
 
         NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, udata = self._read_udata()
 
@@ -201,45 +202,45 @@ class FZReader:
 
         if(NWUH>0):
             if(self.verbose):
-                print(f"UH:",end="")
+                print(f"UH:",end="",file=self.vstream)
                 for i in range(NWUH):
                     x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
                     if(i):
-                        print(",",end="")
-                    print(f" UH({i})={x}",end="")
-                print()
+                        print(",",end="",file=self.vstream)
+                    print(f" UH({i})={x}",end="",file=self.vstream)
+                print(file=self.vstream)
             if(NWUH==2):
                 runno, eventno = struct.unpack('>II',udata[DSS:DSS+8])
         DSS += NWUH
 
         if(self.verbose and NWSEG>0):
-            print(f"ST:",end="")
+            print(f"ST:",end="",file=self.vstream)
             for i in range(NWSEG):
                 x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
                 if(i):
-                    print(",",end="")
-                print(f" ST({i})={x}",end="")
-            print()
+                    print(",",end="",file=self.vstream)
+                print(f" ST({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
         DSS += NWSEG
 
         if(self.verbose and NWTX>0):
-            print(f"TV:",end="")
+            print(f"TV:",end="",file=self.vstream)
             for i in range(NWTX):
                 x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
                 if(i):
-                    print(",",end="")
-                print(f" TV({i})={x}",end="")
-            print()
+                    print(",",end="",file=self.vstream)
+                print(f" TV({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
         DSS += NWTX
 
         if(self.verbose and NWTAB>0):
-            print(f"RT:",end="")
+            print(f"RT:",end="",file=self.vstream)
             for i in range(NWTAB):
                 x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
                 if(i):
-                    print(",",end="")
-                print(f" RT({i})={x}",end="")
-            print()
+                    print(",",end="",file=self.vstream)
+                print(f" RT({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
         DSS += NWTAB
 
         IOCB, = struct.unpack('>I',udata[DSS*4:(DSS+1)*4])
@@ -251,7 +252,7 @@ class FZReader:
 
         if(self.verbose):
             HBID_str = struct.pack('I',HBID).decode("utf-8")
-            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}")
+            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}",file=self.vstream)
 
         if(self.verbose=='max'):
             self._print_record(NDW, udata[DSS*4:])
@@ -274,12 +275,12 @@ class FZReader:
         for i in range(min(NDW,1000)):
             x,  = struct.unpack('>I',data[i*4:(i+1)*4])
             if(i%8==0):
-                print(f'{i*4:4d} |',end='')
-            print(f"  {x:10d}",end='')
+                print(f'{i*4:4d} |',end='',file=self.vstream)
+            print(f"  {x:10d}",end='',file=self.vstream)
             if(i%8==7):
-                print()
+                print(file=self.vstream)
         if(NDW%8!=7):
-            print()
+            print(file=self.vstream)
         return
 
     def _unpack_block(self, NFIRST, NDW, data, datum_code, datum_len):
@@ -292,9 +293,9 @@ class FZReader:
         FMT = f'>{NW*4//datum_len}{datum_code}'
         block_values = struct.unpack(FMT,data[(NFIRST+1)*4:(NFIRST+1+NW)*4])
         if(self.verbose=='max' or self.verbose=='bank'):
-            print(f"BBH: NW={NW}",block_values)
+            print(f"BBH: NW={NW}",block_values,file=self.vstream)
         elif(self.verbose):
-            print(f"BBH: NW={NW}")
+            print(f"BBH: NW={NW}",file=self.vstream)
         return NW+1, block_values
     
     def _unpack_block_I32(self, NFIRST, NDW, data):
@@ -569,8 +570,9 @@ if __name__ == '__main__':
     output_file = None  # Default to stdout
     verbose = False
 
+    args = sys.argv[1:]
     try: 
-        opts, args = getopt.getopt(sys.argv, "o:v", ["output="])
+        opts, args = getopt.getopt(args, "vo:", ["output="])
     except getopt.GetoptError as e:
         print(str(e), file=sys.stderr)
         print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
@@ -580,18 +582,18 @@ if __name__ == '__main__':
         if opt in ("-o", "--output"):
             output_file = arg
         if opt in ("-v"):
-            if verbose == 'bank': verbose = 'full'
+            if verbose == 'bank': verbose = 'max'
             if verbose == True: verbose = 'bank'
             if verbose == False: verbose = True
 
-    if len(args) < 2:
+    if len(args) < 1:
         print("Error: An input file must be specified.", file=sys.stderr)
         print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
-        sys.exit(2)
+        sys.exit(1)
     else:
-        input_file = args[1]
+        input_file = args[0]
 
-    with FZReader(input_file, verbose=False) as reader:
+    with FZReader(input_file, verbose=verbose) as reader:
         with open(output_file, 'w') if output_file else sys.stdout as output:
             output.write('[')            
             i = 0
