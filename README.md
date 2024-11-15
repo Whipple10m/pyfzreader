@@ -1,8 +1,16 @@
 # pyfzreader
 
-Python reader of Whipple "GDF/ZEBRA files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on a small number of files taken between 1998-2000, but should hopefully work for runs before or after this time period.
+Python reader of Whipple `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on a small number of files taken between 1998-2000, but should hopefully work for runs before or after this time period. If you find an error while processing a file, please contact me and I'll try to update resolve the error.
 
-The reader does not depend on any of the CERNLIB system, or on any nonstandard Python packages. The data is extracted by decoding the ZEBRA physical, logical and data-bank structures directly using the Python `struct` package.
+The reader does not depend on any of the CERNLIB system, or on any nonstandard Python packages. The data is extracted by decoding the ZEBRA physical, logical and data-bank structures directly using the Python `struct` package. 
+
+To understand how the reader functions it may be usefult to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the headers and data in "exchange mode".
+ 
+https://cds.cern.ch/record/2296399/files/zebra.pdf
+
+The format Whipple specific data structures, written to the ZEBRA data banks, can be extracted from the GDF code, written by Joachim Rose at Leeds, which directs the writing of the individual data elements in blocks of data all of whom have the same data type (blocks of I32, blocks of I16 etc.). See for example the function GDF$EVENT10 and observe the calls to GDF$MOVE.
+
+https://github.com/Whipple10m/GDF/blob/main/gdf.for
 
 ## Usage ##
 
