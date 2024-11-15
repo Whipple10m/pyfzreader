@@ -498,19 +498,19 @@ class FZReader:
     def _decode_trrt(self, NDW, data):
         NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
-        print(block_values)
+        mode, cycle = block_values[1:3]
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
-        print(block_values)
+        status = block_values[0]
 
         NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
         NFIRST += NW
         target_ra, target_dec = block_values[2:4]
-        telescope_az, telescope_el = block_values[6:8]
-        print(block_values)
+        telescope_az, telescope_el, tracking_error = block_values[6:9]
+        onoff_offset_ra, onoff_offset_dec, sidereal_time = block_values[9:12]
 
         NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
         NFIRST += NW
@@ -520,15 +520,22 @@ class FZReader:
         HRS = 12.0/3.14159265358979324
 
         track = dict(
-            record_type         = 'tracking',
-            record_time_mjd     = record_time_mjd,
-            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version         = gdf_version,
-            target_ra_hours     = target_ra * HRS,
-            target_dec_deg      = target_dec * DEG,
-            telescope_az_deg    = telescope_az * DEG,
-            telescope_el_deg    = telescope_el * DEG,
-            target              = target.strip()    
+            record_type             = 'tracking',
+            record_time_mjd         = record_time_mjd,
+            record_time_str         = self._mjd_to_utc_string(record_time_mjd),
+            gdf_version             = gdf_version,
+            mode                    = mode,
+            cycle                   = cycle,
+            status                  = status,
+            target_ra_hours         = target_ra * HRS,
+            target_dec_deg          = target_dec * DEG,
+            telescope_az_deg        = telescope_az * DEG,
+            telescope_el_deg        = telescope_el * DEG,
+            tracking_error_deg      = tracking_error * DEG,
+            onoff_offset_ra_hours   = onoff_offset_ra * HRS,
+            onoff_offset_dec_deg    = onoff_offset_dec * DEG,
+            sidereal_time_hours     = sidereal_time * HRS,
+            target                  = target.strip()    
         )
         print(track)
         return track
