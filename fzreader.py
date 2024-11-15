@@ -37,6 +37,8 @@ import time
 class FZReader:
     def __init__(self, filename, verbose=False) -> None:
         self.filename = filename
+        if(not filename):
+            raise RuntimeError('No filename given: ' + filename)
         self.file = None
         self.saved_pdata = b''
         self.verbose = verbose
@@ -495,6 +497,16 @@ class FZReader:
         )
         return frame
 
+    def _hms_string(self, angle_rad):
+        TENTHSEC = 10*3600.0*12.0/3.14159265358979324
+        x = int(round(angle_rad * TENTHSEC))
+        return f'{x//36000:02d}h{(x//600)%60:02d}m{(x%600)/10.0:04.1f}s'
+
+    def _dms_string(self, angle_rad):
+        TENTHSEC = 10*3600.0*180.0/3.14159265358979324
+        x = int(round(abs(angle_rad) * TENTHSEC))
+        return f'{"+" if angle_rad>=0 else "-"}{x//36000:03d}d{(x//600)%60:02d}m{(x%600)/10.0:04.1f}s'
+
     def _decode_trrt(self, NDW, data):
         NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
 
@@ -519,23 +531,77 @@ class FZReader:
         DEG = 180.0/3.14159265358979324
         HRS = 12.0/3.14159265358979324
 
+        mode_name = {1:'on', 2:'off', 3:'slewing', 4:'standby',
+                     5:'zenith', 6:'check', 7:'stowing', 8:'drift'}
+
         track = dict(
-            record_type             = 'tracking',
-            record_time_mjd         = record_time_mjd,
-            record_time_str         = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version             = gdf_version,
-            mode                    = mode,
-            cycle                   = cycle,
-            status                  = status,
-            target_ra_hours         = target_ra * HRS,
-            target_dec_deg          = target_dec * DEG,
-            telescope_az_deg        = telescope_az * DEG,
-            telescope_el_deg        = telescope_el * DEG,
-            tracking_error_deg      = tracking_error * DEG,
-            onoff_offset_ra_hours   = onoff_offset_ra * HRS,
-            onoff_offset_dec_deg    = onoff_offset_dec * DEG,
-            sidereal_time_hours     = sidereal_time * HRS,
-            target                  = target.strip()    
+            record_type                 = 'tracking',
+            record_time_mjd             = record_time_mjd,
+            record_time_str             = self._mjd_to_utc_string(record_time_mjd),
+            gdf_version                 = gdf_version,
+            mode                        = mode_name.get(mode,'unknown'),
+            mode_code                   = mode,
+            cycle                       = cycle,
+            status                      = status,
+            target_ra_hours             = target_ra * HRS,
+            target_ra_hms_str           = self._hms_string(target_ra),
+            target_dec_deg              = target_dec * DEG,
+            target_dec_dms_str          = self._dms_string(target_dec),
+            telescope_az_deg            = telescope_az * DEG,
+            telescope_el_deg            = telescope_el * DEG,
+            tracking_error_deg          = tracking_error * DEG,
+            onoff_offset_ra_hours       = onoff_offset_ra * HRS,
+            onoff_offset_ra_hms_str     = self._hms_string(onoff_offset_ra),
+            onoff_offset_dec_deg        = onoff_offset_dec * DEG,
+            onoff_offset_dec_dms_str    = self._dms_string(onoff_offset_dec),
+            sidereal_time_hours         = sidereal_time * HRS,
+            sidereal_time_hms_str       = self._hms_string(sidereal_time),
+            target                      = target.strip()    
         )
-        print(track)
         return track
+
+if __name__ == '__main__':
+    import json
+    import getopt
+    import sys
+
+    input_file = None
+    output_file = None  # Default to stdout
+    verbose = False
+
+    try: 
+        opts, args = getopt.getopt(sys.argv, "o:v", ["output="])
+    except getopt.GetoptError as e:
+        print(str(e), file=sys.stderr)
+        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-o", "--output"):
+            output_file = arg
+        if opt in ("-v"):
+            if verbose == 'bank': verbose = 'full'
+            if verbose == True: verbose = 'bank'
+            if verbose == False: verbose = True
+
+    if len(args) < 2:
+        print("Error: An input file must be specified.", file=sys.stderr)
+        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
+        sys.exit(2)
+    else:
+        input_file = args[1]
+
+    with FZReader(input_file, verbose=False) as reader:
+        with open(output_file, 'w') if output_file else sys.stdout as output:
+            output.write('[')            
+            i = 0
+            record = reader.read()
+            while(record):
+                if(i):
+                    output.write(',\n ')
+                else:
+                    output.write('\n ')
+                json.dump(record, fp=output)
+                i+=1
+                record = reader.read()
+            output.write('\n]\n')
