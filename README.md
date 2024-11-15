@@ -41,19 +41,17 @@ The library can be used to read `fz` files directly, skipping the conversion to 
     ped_sum = numpy.zeros(492) # Hardcode for 490 pixel camera in this example
     ped_sum_sq = numpy.zeros(492)
     with fzreader.FZReader('gt012345.fz') as fz:
-        r = fz.read()
-        while(r):
+        for r in fz:
             if(r['record_type']=='event' and r['event_type']=='pedestal'):
                 nped += 1
                 ped_sum += numpy.asarray(r['adc_values'])
                 ped_sum_sq += numpy.asarray(r['adc_values'])**2
-            r = fz.read()
     ped_val = ped_sum/nped
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
 
 ## Understanding the reader ##
 
-To understand how the reader functions it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the headers and data in "exchange mode".
+To understand how the reader functions it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the physical, logical and data headers in "exchange mode".
  
 https://cds.cern.ch/record/2296399/files/zebra.pdf
 

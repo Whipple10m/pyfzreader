@@ -55,6 +55,15 @@ class FZReader:
         if self.file:
             self.file.close()
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        record = self.read()
+        if not record:
+            raise StopIteration
+        return record
+
     def _nio(self, iocb):
         if(iocb < 12):
             return 1;
