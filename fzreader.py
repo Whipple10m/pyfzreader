@@ -31,8 +31,8 @@
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 # A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
-
 import struct
+import time
 
 class FZReader:
     def __init__(self, filename, verbose=False) -> None:
@@ -262,6 +262,8 @@ class FZReader:
             return self._decode_hvvh(NDW, udata[DSS*4:])
         elif(HBID == 0x46545446): # FTTF - 10m frame
             return self._decode_fttf(NDW, udata[DSS*4:])
+        elif(HBID == 0x54525254): # TRRT - Tracking information
+            return self._decode_trrt(NDW, udata[DSS*4:])
 
         return dict(record_type     = 'unknown',
                     bank_id         = struct.pack('I',HBID).decode("utf-8"))
@@ -312,15 +314,19 @@ class FZReader:
         gdf_version, = struct.unpack('>I',data[0:4])
         if(gdf_version < min_version):
             raise RuntimeError(f'Only GDF versions >={min_version} are supported (this file is version {gdf_version})')
+        record_time_mjd, = struct.unpack('>d',data[16:24])
         NW = 6 # It's 7 in the GDF FORTRAN code.. but they start from 1
-        return NW, gdf_version
+        return NW, gdf_version, record_time_mjd
     
     def _bytes_to_string(self, bytes_string):
         return ''.join(chr(b) for b in bytes_string if (32 <= b <= 126) or b in (9, 10, 13))
 
+    def _mjd_to_utc_string(self, mjd):
+        epoch_time = round((mjd-40587.0)*86400000)*0.001
+        return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
+
     def _decode_ette(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=74)
-        record_time_mjd, = struct.unpack('>d',data[16:24])
+        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=74)
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
@@ -349,6 +355,10 @@ class FZReader:
                        ((grs_time&0x000000F0) >> 4)*10 + \
                        ((grs_time&0x0000000F) >> 0)
         
+        grs_doy = ((grs_day&0x00000F00) >> 8)*100 + \
+                  ((grs_day&0x000000F0) >> 4)*10 + \
+                  ((grs_day&0x0000000F) >> 0)
+
         grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
 
         grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
@@ -356,6 +366,7 @@ class FZReader:
         ev = dict(
             record_type         = 'event',
             record_time_mjd     = record_time_mjd,
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             nadc                = nadc,
             ntrigger            = ntrigger,
@@ -366,6 +377,7 @@ class FZReader:
             elaptime_sec        = elaptime_sec,
             elaptime_ns         = elaptime_ns,
             grs_data            = [ grs_time_10MHz, grs_time, grs_day ],
+            grs_doy             = grs_doy,
             grs_utc_time_sec    = grs_utc_time_sec,
             grs_utc_time_str    = grs_utc_time_str,
             event_type          = 'pedestal' if trigger==1 else 'sky',
@@ -375,7 +387,7 @@ class FZReader:
         return ev
 
     def _decode_ruur(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=27)
+        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=27)
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
@@ -404,6 +416,8 @@ class FZReader:
 
         rh = dict(
             record_type         = 'run',
+            record_time_mjd     = record_time_mjd,
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             run_num             = run_num, 
             sky_quality         = chr(64+sky_quality) if (sky_quality>0 and sky_quality<3) else '?',
@@ -416,7 +430,7 @@ class FZReader:
         return rh
 
     def _decode_hvvh(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=67)
+        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=67)
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
@@ -445,6 +459,8 @@ class FZReader:
 
         hv = dict(
             record_type         = 'hv',
+            record_time_mjd     = record_time_mjd,
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             mode                = mode,
             num_channels        = num_channels,
@@ -458,18 +474,61 @@ class FZReader:
         return hv
 
     def _decode_fttf(self, NDW, data):
-        NFIRST, gdf_version = self._unpack_gdf_header(data, min_version=80)
+        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        NFIRST += NW
-        print(block_values)
+        # Ignore 10m frames for the moment, they weren't used in the 490 pixel camera
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        NFIRST += NW
-        print(block_values)
+        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        # NFIRST += NW
+
+        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        # NFIRST += NW
+
+        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        # NFIRST += NW
 
         frame = dict(
             record_type         = 'frame',
+            record_time_mjd     = record_time_mjd,
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
         )
         return frame
+
+    def _decode_trrt(self, NDW, data):
+        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        print(block_values)
+
+        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+        NFIRST += NW
+        print(block_values)
+
+        NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
+        NFIRST += NW
+        target_ra, target_dec = block_values[2:4]
+        telescope_az, telescope_el = block_values[6:8]
+        print(block_values)
+
+        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
+        NFIRST += NW
+        target = self._bytes_to_string(block_values[0])
+
+        DEG = 180.0/3.14159265358979324
+        HRS = 12.0/3.14159265358979324
+
+        track = dict(
+            record_type         = 'tracking',
+            record_time_mjd     = record_time_mjd,
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
+            gdf_version         = gdf_version,
+            target_ra_hours     = target_ra * HRS,
+            target_dec_deg      = target_dec * DEG,
+            telescope_az_deg    = telescope_az * DEG,
+            telescope_el_deg    = telescope_el * DEG,
+            target              = target.strip()    
+        )
+        print(track)
+        return track
