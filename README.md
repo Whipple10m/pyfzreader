@@ -18,16 +18,15 @@ This file can then be read into Python. For example a crude script to calculate 
 
     import json
     import numpy
-    with open('gt012345.json', 'r') as fz:
-        records = json.load(fz)
     nped = 0
     ped_sum = numpy.zeros(492) # Hardcode for 490 pixel camera in this example
     ped_sum_sq = numpy.zeros(492)
-    for r in records:
-        if(r['record_type']=='event' and r['event_type']=='pedestal'):
-            nped += 1
-            ped_sum += numpy.asarray(r['adc_values'])
-            ped_sum_sq += numpy.asarray(r['adc_values'])**2
+    with open('gt012345.json', 'r') as fz:
+        for r in json.load(fz):
+            if(r['record_type']=='event' and r['event_type']=='pedestal'):
+                nped += 1
+                ped_sum += numpy.asarray(r['adc_values'])
+                ped_sum_sq += numpy.asarray(r['adc_values'])**2
     ped_val = ped_sum/nped
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
 
