@@ -4,14 +4,6 @@ Python reader of Whipple `GDF/ZEBRA` files, also known as `fz` files. This reade
 
 The reader does not depend on any of the CERNLIB system, or on any nonstandard Python packages. The data is extracted by decoding the ZEBRA physical, logical and data-bank structures directly using the Python `struct` package. 
 
-To understand how the reader functions it may be usefult to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the headers and data in "exchange mode".
- 
-https://cds.cern.ch/record/2296399/files/zebra.pdf
-
-The format Whipple specific data structures, written to the ZEBRA data banks, can be extracted from the GDF code, written by Joachim Rose at Leeds, which directs the writing of the individual data elements in blocks of data all of whom have the same data type (blocks of I32, blocks of I16 etc.). See for example the function GDF$EVENT10 and observe the calls to GDF$MOVE.
-
-https://github.com/Whipple10m/GDF/blob/main/gdf.for
-
 ## Usage ##
 
 There are two ways to use the reader, as a library which allows you to read and process data from `fz` files in your own Python scripts / Jupyter notebooks, or as a script to convert `fz` files into JSON format that can be read by any system that can process JSON.
@@ -58,3 +50,14 @@ The library can be used to read `fz` files directly, skipping the conversion to 
             r = fz.read()
     ped_val = ped_sum/nped
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
+
+## Understanding the reader ##
+
+To understand how the reader functions it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the headers and data in "exchange mode".
+ 
+https://cds.cern.ch/record/2296399/files/zebra.pdf
+
+The format Whipple specific data structures, written to the ZEBRA data banks, can be extracted from the GDF code, written by Joachim Rose at Leeds, which directs the writing of the individual data elements in blocks of data all of whom have the same data type (blocks of I32, blocks of I16 etc.). See for example the function GDF$EVENT10 and observe the calls to GDF$MOVE.
+
+https://github.com/Whipple10m/GDF/blob/main/gdf.for
+
