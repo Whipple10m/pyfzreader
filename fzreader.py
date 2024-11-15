@@ -33,6 +33,7 @@
 
 import struct
 import time
+import sys
 
 class FZReader:
     def __init__(self, filename, verbose=False) -> None:
