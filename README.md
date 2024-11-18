@@ -109,10 +109,10 @@ The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572
 - `'gdf_version'`: see above.
 - `'mode`': tracking mode, one of `'on'`, `'off'`, `'slewing'`, `'standby`, `'zenith'`, `'check'`, `'stowing'`, `'drift'`, or `'unknown'`.
 - `'mode_code'`: integer code corresponding to mode
-- `'cycle'`: integer giving serial number of information transferred by tracking system.
+- `'read_cycle'`: integer giving cycle number of information transferred by tracking system.
 - `'status'`: bit pattern giving tracking status (values unknown)
 - `'target_ra_hours'`: right-ascention of target in hours from 0.0 to 24.0.
-- `'target_ra_hms_str`': right-ascention of target as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.789s'`.
+- `'target_ra_hms_str`': right-ascention of target as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.7s'`.
 - `'target_dec_deg`': declination of target in degrees from -90.0 to +90.0.
 - `'target_dec_dms_str`': declination of target as printable string in format `'+/-DDDdMMmSS.Ss'`, e.g. `'+12h34m56.7s'`
 - `'telescope_az_deg'`: telescope azimuth angle in degrees.
@@ -123,10 +123,27 @@ The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572
 - '`onoff_offset_dec_deg`': declination offset between ON and OFF runs in degrees.
 - `'onoff_offset_dec_dms_str'`: declination offset between ON and OFF runs as printable string in format `'+/-DDDdMMmSS.Ss'`, e.g. `'+00h00m00.0s'`
 - `'sidereal_time_hours'`: local sidereal time in hours.
-- `'sidereal_time_hms_str'`: local sidereal time as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.789s'`.
+- `'sidereal_time_hms_str'`: local sidereal time as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.7s'`.
 - `'target'`: string giving name of target
 
 Other data items present in the FORTAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
+
+### High-voltage status ###
+
+The [GDF HV-record structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L303) is decoded into a Python dictionary that contains the following items:
+
+- `'record_type'`: `'event'`.
+- `'record_time_mjd'`: see above.
+- `'record_time_str'`: see above. 
+- `'gdf_version'`: see above.
+- `'mode_code'`: integer value corresponding to operating mode (values unknown).
+- `'num_channels'`: number of HV channel values stored in record.
+- `'read_cycle'`: integer giving cycle number of information transferred by HV system.
+- `'status'`: array of size `'num_channels'` giving status of HV system for this channel. This is a bit-field described in the [GDF FORTRAN code](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L205).
+- `'v_set'`: array of size `'num_channels' giving voltage set in each channel (negative value given).
+- `'v_actual'`: array of size `'num_channels' giving voltage measured in each channel (negative value given).
+- `'i_supply'`: array of size `'num_channels' giving measured power-supply current in each channel.
+- `'i_anode'`: array of size `'num_channels' giving measured anode current in each channel.
 
 ## Understanding the reader ##
 
