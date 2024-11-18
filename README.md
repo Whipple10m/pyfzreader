@@ -160,7 +160,7 @@ Other data items present in the FORTAN structure are not decoded by the reader a
 
 ## Understanding the reader ##
 
-To understand how the reader functions it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the physical, logical and data headers in "exchange mode".
+To understand how the reader functions under the hood it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the physical, logical and data headers in "exchange mode".
  
 https://cds.cern.ch/record/2296399/files/zebra.pdf
 
