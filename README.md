@@ -145,6 +145,19 @@ The [GDF HV-record structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 - `'i_supply'`: array of size `'num_channels' giving measured power-supply current in each channel.
 - `'i_anode'`: array of size `'num_channels' giving measured anode current in each channel.
 
+Other data items present in the FORTAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
+
+### 10m frame ###
+
+The [GDF 10m frame structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L413) is decoded into a Python dictionary that contains the following items:
+
+- `'record_type'`: `'event'`.
+- `'record_time_mjd'`: see above.
+- `'record_time_str'`: see above. 
+- `'gdf_version'`: see above.
+
+Other data items present in the FORTAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
+
 ## Understanding the reader ##
 
 To understand how the reader functions it may be useful to refer to the "Overview of the ZEBRA System" (CERN Program Library Long Writeups Q100/Q101), and in particular Chapter 10, which describes the layout of the physical, logical and data headers in "exchange mode".
@@ -154,4 +167,3 @@ https://cds.cern.ch/record/2296399/files/zebra.pdf
 The format Whipple specific data structures, written to the ZEBRA data banks, can be extracted from the GDF code, written by Joachim Rose at Leeds, which directs the writing of the individual data elements in blocks of data all of whom have the same data type (blocks of I32, blocks of I16 etc.). See for example the function GDF$EVENT10 and observe the calls to GDF$MOVE.
 
 https://github.com/Whipple10m/GDF/blob/main/gdf.for
-
