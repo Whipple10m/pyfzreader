@@ -447,7 +447,7 @@ class FZReader:
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
-        _, mode, num_channels, read_cycle = block_values
+        _, mode_code, num_channels, read_cycle = block_values
 
         status = ()
         v_set = ()
@@ -475,7 +475,7 @@ class FZReader:
             record_time_mjd     = record_time_mjd,
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
-            mode                = mode,
+            mode_code           = mode_code,
             num_channels        = num_channels,
             read_cycle          = read_cycle,
             status              = status,
@@ -523,7 +523,7 @@ class FZReader:
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
-        mode, cycle = block_values[1:3]
+        mode, read_cycle = block_values[1:3]
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
@@ -552,7 +552,7 @@ class FZReader:
             gdf_version                 = gdf_version,
             mode                        = mode_name.get(mode,'unknown'),
             mode_code                   = mode,
-            cycle                       = cycle,
+            read_cycle                  = read_cycle,
             status                      = status,
             target_ra_hours             = target_ra * HRS,
             target_ra_hms_str           = self._hms_string(target_ra),
