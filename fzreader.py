@@ -381,8 +381,6 @@ class FZReader:
             record_time_mjd     = record_time_mjd,
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
-            nadc                = nadc,
-            ntrigger            = ntrigger,
             run_num             = run_num, 
             event_num           = event_num, 
             livetime_sec        = livetime_sec, 
@@ -394,6 +392,8 @@ class FZReader:
             grs_utc_time_sec    = grs_utc_time_sec,
             grs_utc_time_str    = grs_utc_time_str,
             event_type          = 'pedestal' if trigger==1 else 'sky',
+            nadc                = nadc,
+            ntrigger            = ntrigger,
             trigger_data        = trigger_data,
             adc_values          = adc_values
         )
@@ -413,11 +413,11 @@ class FZReader:
 
         NW, block_values = self._unpack_block_F32(NFIRST, NDW, data)
         NFIRST += NW
-        trigger_mode = block_values[:2]
+        trigger_mode = block_values[0]
 
         NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
         NFIRST += NW
-        nominal_utc_start, nominal_utc_end = block_values
+        nominal_mjd_start, nominal_mjd_end = block_values
 
         NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
         NFIRST += NW
@@ -435,8 +435,8 @@ class FZReader:
             run_num             = run_num, 
             sky_quality         = chr(64+sky_quality) if (sky_quality>0 and sky_quality<3) else '?',
             trigger_mode        = trigger_mode,
-            nominal_utc_start   = nominal_utc_start,
-            nominal_utc_end     = nominal_utc_end,
+            nominal_mjd_start   = nominal_mjd_start,
+            nominal_mjd_end     = nominal_mjd_end,
             observers           = observers.strip(),
             comment             = comment.strip()
         )
