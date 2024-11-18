@@ -103,7 +103,7 @@ Other data items present in the FORTAN structure are not decoded by the reader a
 
 The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L375) is decoded into a Python dictionary that contains the following items:
 
-- `'record_type'`: `'event'`.
+- `'record_type'`: `'tracking'`.
 - `'record_time_mjd'`: see above.
 - `'record_time_str'`: see above. 
 - `'gdf_version'`: see above.
@@ -132,7 +132,7 @@ Other data items present in the FORTAN structure are not decoded by the reader a
 
 The [GDF HV-record structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L303) is decoded into a Python dictionary that contains the following items:
 
-- `'record_type'`: `'event'`.
+- `'record_type'`: `'hv'`.
 - `'record_time_mjd'`: see above.
 - `'record_time_str'`: see above. 
 - `'gdf_version'`: see above.
@@ -151,7 +151,7 @@ Other data items present in the FORTAN structure are not decoded by the reader a
 
 The [GDF 10m frame structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L413) is decoded into a Python dictionary that contains the following items:
 
-- `'record_type'`: `'event'`.
+- `'record_type'`: `'frame'`.
 - `'record_time_mjd'`: see above.
 - `'record_time_str'`: see above. 
 - `'gdf_version'`: see above.
