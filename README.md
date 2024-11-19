@@ -50,7 +50,7 @@ The library can be used to read `fz` files directly, skipping the conversion to 
 
 ## Generating images of events ##
 
-The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all evebts in a given `.fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. For simplicity, it only supports the 490 pixel camera.
+The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all events in a given `.fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. For simplicity, it only supports the 490 pixel camera.
 
 ![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00211.png)
 
