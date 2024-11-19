@@ -52,6 +52,8 @@ The library can be used to read `fz` files directly, skipping the conversion to 
 
 The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all evebts in a given `.fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. For simplicity, it only supports the 490 pixel camera.
 
+![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00211.png)
+
 ## Format of data records ##
 
 The following types of data record are supported by the reader and decoded into a Python dictionary: `Run Header`, `10m event`, `HV measurement`, `Tracking status`. In addition, the `10m frame` is recognized by the reader but no data is decoded, and a minimal dictionary is returned as described below. All other records result in the return a dictionary with the following elements:
