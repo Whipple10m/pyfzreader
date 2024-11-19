@@ -1,6 +1,8 @@
 # pyfzreader
 
-Python reader of Whipple `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on a small number of files taken between 1998-2000, but should hopefully work for runs before or after this time period. If you find an error while processing a file, please contact me, and I'll try to update the code to resolve the error.
+Python reader of Whipple 10m `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on a small number of files taken between 1998-2000, but should hopefully work for runs before or after this time period. If you find an error while processing a file, please contact me, and I'll try to update the code to resolve the error.
+
+See [Kildea et al., Astroparticle Physics, 28, 2, 182-195, (2007)](https://www.sciencedirect.com/science/article/abs/pii/S0927650507000746) for details of the Whiplle 10m system (camera, telescope, DAQ) during the period from 1997-2006, after the so-called GRANITE upgrade program. The article is also [available from its author.](https://kildealab.com/publication/elsevier13/elsevier13.pdf) (last downloaded 2004-11-19).
 
 The reader does not depend on any of the CERNLIB system, or on any nonstandard Python packages. The data is extracted by decoding the ZEBRA physical, logical and data-bank structures directly using the Python `struct` package. 
 
@@ -32,7 +34,7 @@ This file can then be read into Python. For example a crude script to calculate 
 
 ### Integrated directly into your analysis scripts ###
 
-The library can be used to read `fz` files directly, skipping the conversion to JSON. For example the script above can be rewritten as:
+The library can be used to read `.fz` files directly, skipping the conversion to JSON. For example the script above can be rewritten as:
 
     import fzreader
     import numpy
