@@ -41,13 +41,14 @@ import subprocess
 # Can you modify this to automatically handle data in BZ2, gzip and UNIX compress format
 
 class FZReader:
-    def __init__(self, filename, verbose=False) -> None:
+    def __init__(self, filename, verbose=False, verbose_file=None) -> None:
         self.filename = filename
         if(not filename):
             raise RuntimeError('No filename given: ' + filename)
         self.file = None
         self.saved_pdata = b''
         self.verbose = verbose
+        self.verbose_file = verbose_file
         self.vstream = sys.stdout
         pass
 
@@ -61,12 +62,16 @@ class FZReader:
             self.file = subprocess.Popen(['gunzip', '-c', self.filename], stdout=subprocess.PIPE).stdout
         else:
             self.file = open(self.filename, 'rb')
-        pdata = b''
+        self.saved_pdata = b''
+        self.vstream = open(self.verbose_file, 'w') if self.verbose_file else sys.stdout
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.file:
             self.file.close()
+        if self.vstream is not sys.stdout:
+            self.vstream.close()
+        self.vstream = sys.stdout
 
     def __iter__(self):
         return self
@@ -347,8 +352,15 @@ class FZReader:
     def _bytes_to_string(self, bytes_string):
         return ''.join(chr(b) for b in bytes_string if (32 <= b <= 126) or b in (9, 10, 13))
 
+    def _mjd_cleaned(self, mjd):
+        if(mjd>55927 or mjd<48622.0):
+            return 0
+        return mjd
+
     def _mjd_to_utc_string(self, mjd):
-        epoch_time = round((mjd-40587.0)*86400000)*0.001
+        if(mjd>55927 or mjd<48622.0):
+            return 'unknown'
+        epoch_time = max(round((mjd-40587.0)*86400000)*0.001,0)
         return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
 
     def _decode_ette(self, NDW, data):
@@ -391,7 +403,7 @@ class FZReader:
         
         ev = dict(
             record_type         = 'event',
-            record_time_mjd     = record_time_mjd,
+            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             run_num             = run_num, 
@@ -442,7 +454,7 @@ class FZReader:
 
         rh = dict(
             record_type         = 'run',
-            record_time_mjd     = record_time_mjd,
+            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             run_num             = run_num, 
@@ -485,7 +497,7 @@ class FZReader:
 
         hv = dict(
             record_type         = 'hv',
-            record_time_mjd     = record_time_mjd,
+            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
             mode_code           = mode_code,
@@ -515,7 +527,7 @@ class FZReader:
 
         frame = dict(
             record_type         = 'frame',
-            record_time_mjd     = record_time_mjd,
+            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
             record_time_str     = self._mjd_to_utc_string(record_time_mjd),
             gdf_version         = gdf_version,
         )
@@ -560,7 +572,7 @@ class FZReader:
 
         track = dict(
             record_type                 = 'tracking',
-            record_time_mjd             = record_time_mjd,
+            record_time_mjd             = self._mjd_cleaned(record_time_mjd),
             record_time_str             = self._mjd_to_utc_string(record_time_mjd),
             gdf_version                 = gdf_version,
             mode                        = mode_name.get(mode,'unknown'),
@@ -592,13 +604,14 @@ if __name__ == '__main__':
     input_file = None
     output_file = None  # Default to stdout
     verbose = False
+    verbose_file = None
 
     args = sys.argv[1:]
     try: 
-        opts, args = getopt.getopt(args, "vo:", ["output="])
+        opts, args = getopt.getopt(args, "vo:d:", ["output=", "debug="])
     except getopt.GetoptError as e:
         print(str(e), file=sys.stderr)
-        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
+        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] [-d <debug_file> | --debug=<debug_file>] <input_file.fz>", file=sys.stderr)
         sys.exit(2)
 
     for opt, arg in opts:
@@ -608,15 +621,17 @@ if __name__ == '__main__':
             if verbose == 'bank': verbose = 'max'
             if verbose == True: verbose = 'bank'
             if verbose == False: verbose = True
+        if opt in ("-d", "--debug"):
+            verbose_file = arg
 
     if len(args) < 1:
         print("Error: An input file must be specified.", file=sys.stderr)
-        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] <input_file.fz>", file=sys.stderr)
+        print("Usage: fzreader.py [-o <output_file> | --output=<output_file>] [-d <debug_file> | --debug=<debug_file>] <input_file.fz>", file=sys.stderr)
         sys.exit(1)
     else:
         input_file = args[0]
 
-    with FZReader(input_file, verbose=verbose) as reader:
+    with FZReader(input_file, verbose=verbose, verbose_file=verbose_file) as reader:
         with open(output_file, 'w') if output_file else sys.stdout as output:
             output.write('[')            
             i = 0
