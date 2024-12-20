@@ -344,7 +344,7 @@ class FZReader:
     def _unpack_gdf_header(self, data, record_type):
         gdf_version, = struct.unpack('>I',data[0:4])
         record_time_mjd, = struct.unpack('>d',data[16:24])
-        NW = 6 # It's 7 in the GDF FORTRAN code.. but they start from 1
+        NW = 6 if gdf_version>=27 else 5 # It's 7/6 in the GDF FORTRAN code.. but they start from 1
         record = dict(
             record_type         = record_type,
             record_time_mjd     = self._mjd_cleaned(record_time_mjd),
@@ -431,8 +431,6 @@ class FZReader:
 
     def _decode_ruur(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'run')
-        if(record['gdf_version'] < 27):
-           return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
@@ -441,29 +439,39 @@ class FZReader:
         NFIRST += NW
         run_num = block_values[3]
         sky_quality = block_values[5]
+        trig_mode = block_values[6]
         comment_len = block_values[12]
 
         NW, block_values = self._unpack_block_F32(NFIRST, NDW, data)
         NFIRST += NW
-        trigger_mode = block_values[0]
+        sid_length = block_values[0]
 
         NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
         NFIRST += NW
         nominal_mjd_start, nominal_mjd_end = block_values
 
-        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-        NFIRST += NW
-        observers = self._bytes_to_string(block_values[0][80:])
+        if(record['gdf_version'] >= 27):
+            NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
+            NFIRST += NW
+            observers = self._bytes_to_string(block_values[0][80:])
 
-        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-        NFIRST += NW
-        comment = self._bytes_to_string(block_values[0])
+            NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
+            NFIRST += NW
+            comment = self._bytes_to_string(block_values[0])
+        else:
+            NFIRST += 1
+            # Filename would be here but it doesn't seem to be used
+            NFIRST += 20
+            observers = self._bytes_to_string(data[NFIRST*4:(NFIRST+20)*4])
+            NFIRST += 20
+            comment = self._bytes_to_string(data[NFIRST*4:(NFIRST+comment_len)*4])
 
         record.update(dict(
             record_was_decoded  = True,
             run_num             = run_num, 
             sky_quality         = chr(64+sky_quality) if (sky_quality>0 and sky_quality<3) else '?',
-            trigger_mode        = trigger_mode,
+            trig_mode           = trig_mode,
+            sid_length          = sid_length,
             nominal_mjd_start   = nominal_mjd_start,
             nominal_mjd_end     = nominal_mjd_end,
             observers           = observers.strip(),
