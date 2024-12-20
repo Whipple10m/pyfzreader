@@ -34,6 +34,11 @@
 import struct
 import time
 import sys
+import bz2
+import gzip
+import subprocess
+
+# Can you modify this to automatically handle data in BZ2, gzip and UNIX compress format
 
 class FZReader:
     def __init__(self, filename, verbose=False) -> None:
@@ -47,7 +52,15 @@ class FZReader:
         pass
 
     def __enter__(self):
-        self.file = open(self.filename, 'rb')
+        if self.filename.endswith('.bz2'):
+            self.file = bz2.open(self.filename, 'rb')
+        elif self.filename.endswith('.gz') or self.filename.endswith('.fzg'):
+            self.file = gzip.open(self.filename, 'rb')
+        elif self.filename.endswith('.Z') or self.filename.endswith('.fzz'):
+            # Use gunzip rather than uncompress as latter insists filename end with ".Z"
+            self.file = subprocess.Popen(['gunzip', '-c', self.filename], stdout=subprocess.PIPE).stdout
+        else:
+            self.file = open(self.filename, 'rb')
         pdata = b''
         return self
 
