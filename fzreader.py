@@ -357,12 +357,14 @@ class FZReader:
         return ''.join(chr(b) for b in bytes_string if (32 <= b <= 126) or b in (9, 10, 13))
 
     def _mjd_cleaned(self, mjd):
-        if(mjd>55927 or mjd<48622.0):
+        if(mjd!=mjd or mjd>55927 or mjd<48622.0):
+            # MJD is NaN or out of range
             return 0
         return mjd
 
     def _mjd_to_utc_string(self, mjd):
-        if(mjd>55927 or mjd<48622.0):
+        if(self._mjd_cleaned(mjd)==0):
+            # MJD is NaN or out of range
             return 'unknown'
         epoch_time = max(round((mjd-40587.0)*86400000)*0.001,0)
         return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
