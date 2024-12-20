@@ -149,7 +149,7 @@ class FZReader:
         while(NWLR*4>len(ldata)):
             NWTOLR, pdata = self._read_pdata()
             if(not pdata):
-                raise RuntimeError('ZEBRA file EOF with incomplete logical packet')
+                raise EOFError('ZEBRA file EOF with incomplete logical packet')
 
             if(NWTOLR == 0):
                 ldata += pdata
@@ -341,13 +341,17 @@ class FZReader:
     def _unpack_block_S(self, NFIRST, NDW, data):
         return self._unpack_block(NFIRST, NDW, data, 's', 1)
 
-    def _unpack_gdf_header(self, data, min_version=1):
+    def _unpack_gdf_header(self, data, record_type):
         gdf_version, = struct.unpack('>I',data[0:4])
-        if(gdf_version < min_version):
-            raise RuntimeError(f'Only GDF versions >={min_version} are supported (this file is version {gdf_version})')
         record_time_mjd, = struct.unpack('>d',data[16:24])
         NW = 6 # It's 7 in the GDF FORTRAN code.. but they start from 1
-        return NW, gdf_version, record_time_mjd
+        record = dict(
+            record_type         = record_type,
+            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
+            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
+            record_was_decoded  = False,
+            gdf_version         = gdf_version)
+        return NW, record
     
     def _bytes_to_string(self, bytes_string):
         return ''.join(chr(b) for b in bytes_string if (32 <= b <= 126) or b in (9, 10, 13))
@@ -364,8 +368,10 @@ class FZReader:
         return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
 
     def _decode_ette(self, NDW, data):
-        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=74)
-
+        NFIRST, record = self._unpack_gdf_header(data, 'event')
+        if(record['gdf_version'] < 74):
+           return record
+           
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
         nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
@@ -401,11 +407,8 @@ class FZReader:
 
         grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
         
-        ev = dict(
-            record_type         = 'event',
-            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
-            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version         = gdf_version,
+        record.update(dict(
+            record_was_decoded  = True,
             run_num             = run_num, 
             event_num           = event_num, 
             livetime_sec        = livetime_sec, 
@@ -421,11 +424,13 @@ class FZReader:
             ntrigger            = ntrigger,
             trigger_data        = trigger_data,
             adc_values          = adc_values
-        )
-        return ev
+        ))
+        return record
 
     def _decode_ruur(self, NDW, data):
-        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=27)
+        NFIRST, record = self._unpack_gdf_header(data, 'run')
+        if(record['gdf_version'] < 27):
+           return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
@@ -452,11 +457,8 @@ class FZReader:
         NFIRST += NW
         comment = self._bytes_to_string(block_values[0])
 
-        rh = dict(
-            record_type         = 'run',
-            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
-            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version         = gdf_version,
+        record.update(dict(
+            record_was_decoded  = True,
             run_num             = run_num, 
             sky_quality         = chr(64+sky_quality) if (sky_quality>0 and sky_quality<3) else '?',
             trigger_mode        = trigger_mode,
@@ -464,11 +466,13 @@ class FZReader:
             nominal_mjd_end     = nominal_mjd_end,
             observers           = observers.strip(),
             comment             = comment.strip()
-        )
-        return rh
+        ))
+        return record
 
     def _decode_hvvh(self, NDW, data):
-        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=67)
+        NFIRST, record = self._unpack_gdf_header(data, 'hv')
+        if(record['gdf_version'] < 67):
+           return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         NFIRST += NW
@@ -495,11 +499,8 @@ class FZReader:
             NW, i_anode = self._unpack_block_F32(NFIRST, NDW, data)
             NFIRST += NW
 
-        hv = dict(
-            record_type         = 'hv',
-            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
-            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version         = gdf_version,
+        record.update(dict(
+            record_was_decoded  = True,
             mode_code           = mode_code,
             num_channels        = num_channels,
             read_cycle          = read_cycle,
@@ -508,30 +509,13 @@ class FZReader:
             v_actual            = v_actual,
             i_supply            = i_supply,
             i_anode             = i_anode
-        )
-        return hv
+        ))
+        return record
 
     def _decode_fttf(self, NDW, data):
-        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
-
+        NFIRST, record = self._unpack_gdf_header(data, 'frame')
         # Ignore 10m frames for the moment, they weren't used in the 490 pixel camera
-
-        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        # NFIRST += NW
-
-        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        # NFIRST += NW
-
-        # NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        # NFIRST += NW
-
-        frame = dict(
-            record_type         = 'frame',
-            record_time_mjd     = self._mjd_cleaned(record_time_mjd),
-            record_time_str     = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version         = gdf_version,
-        )
-        return frame
+        return record
 
     def _hms_string(self, angle_rad):
         TENTHSEC = 10*3600.0*12.0/3.14159265358979324
@@ -544,7 +528,9 @@ class FZReader:
         return f'{"+" if angle_rad>=0 else "-"}{x//36000:03d}d{(x//600)%60:02d}m{(x%600)/10.0:04.1f}s'
 
     def _decode_trrt(self, NDW, data):
-        NFIRST, gdf_version, record_time_mjd = self._unpack_gdf_header(data, min_version=80)
+        NFIRST, record = self._unpack_gdf_header(data, 'tracking')
+        if(record['gdf_version'] < 80):
+           return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
@@ -570,11 +556,8 @@ class FZReader:
         mode_name = {1:'on', 2:'off', 3:'slewing', 4:'standby',
                      5:'zenith', 6:'check', 7:'stowing', 8:'drift'}
 
-        track = dict(
-            record_type                 = 'tracking',
-            record_time_mjd             = self._mjd_cleaned(record_time_mjd),
-            record_time_str             = self._mjd_to_utc_string(record_time_mjd),
-            gdf_version                 = gdf_version,
+        record.update(dict(
+            record_was_decoded          = True,
             mode                        = mode_name.get(mode,'unknown'),
             mode_code                   = mode,
             read_cycle                  = read_cycle,
@@ -593,8 +576,8 @@ class FZReader:
             sidereal_time_hours         = sidereal_time * HRS,
             sidereal_time_hms_str       = self._hms_string(sidereal_time),
             target                      = target.strip()    
-        )
-        return track
+        ))
+        return record
 
 if __name__ == '__main__':
     import json
