@@ -50,6 +50,7 @@ class FZReader:
         self.verbose = verbose
         self.verbose_file = verbose_file
         self.vstream = sys.stdout
+        self.end_of_run = False
         pass
 
     def __enter__(self):
@@ -103,7 +104,7 @@ class FZReader:
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
-            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR=NWTOLR, NFAST={NFAST}",file=self.vstream)
+            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}",file=self.vstream)
 
         pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
@@ -135,15 +136,21 @@ class FZReader:
 
             NWLR, LRTYP = struct.unpack('>II',pdata[0:8])
             if(NWLR == 0):
+                # Skip implicit padding records
                 pdata = pdata[4:]
                 continue
             elif(LRTYP == 5 or LRTYP == 6):
                 # Skip padding records - assume these are only at end of PR
+                if(self.verbose):
+                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
                 NWLR = 0
             elif(NWLR*4 < len(pdata)-8):
+                # Physical record contains more data after this logical record
                 ldata = pdata[8:NWLR*4+8]
+                # Save the rest of the physical data for the next logical record
                 self.saved_pdata = pdata[NWLR*4+8:]
             else:
+                # Physical record contains no more data after this logical record
                 ldata = pdata[8:]
 
         while(NWLR*4>len(ldata)):
@@ -167,10 +174,20 @@ class FZReader:
         while(LRTYP!=2 and LRTYP!=3):
             NWLR,LRTYP,ldata = self._read_ldata()
             if(not ldata):
+                if(not self.end_of_run):
+                    raise EOFError('ZEBRA file end-of-file not found before end of data')
                 return None, None, None, None, None, None, None
-            if(LRTYP==4):
+            if(LRTYP == 1):
+                # Start-of-run or end-of-run, flag end-of-run
+                if(NWLR>0):
+                    NRUN = struct.unpack('>i',ldata[0:4])[0]
+                    if(self.verbose):
+                        print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NRUN={NRUN} (skipping)",file=self.vstream)
+                    if(NRUN<=0):
+                        self.end_of_run = True
+            elif(LRTYP==4):
                 raise RuntimeError('ZEBRA logical extension found where start expected')
-            if(self.verbose and LRTYP!=2 and LRTYP!=3):
+            elif(self.verbose and LRTYP!=2 and LRTYP!=3):
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(len(ldata)<40):
