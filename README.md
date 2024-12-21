@@ -10,11 +10,18 @@ The reader does not depend on any of the CERNLIB system, or on any nonstandard P
 
 There are two ways to use the reader, as a library which allows you to read and process data from `fz` files in your own Python scripts / Jupyter notebooks, or as a script to convert `fz` files into JSON format that can be read by any system that can process JSON.
 
+The library can open `fz` files stored as:
+
+- BZIP2 : with the extension of `.fz.bz2`, using the Python `bz2` package that is part of the Python Standard Library,
+- GZIP : with the extension of `.fz.gz`, or `.fzg`, using the Python `gzip` package that is part of the Python Standard Library,
+- LZW (UNIX) compress : with the extension of `.fz.Z`, or `.fzz` using the `gunzip` application as a sub-process,
+- Uncompressed : any other extension is assumed to be an uncompressed `fz` file which can be read directly by the reader.
+
 ### As a standalone JSON converter ###
 
-To convert a file `gt012345.fz` into JSON you can use invoke `fzreader.py` directly as:
+To convert a file `gt012345.fz.bz2` into JSON you can use invoke `fzreader.py` directly as:
 
-    python3 fzreader.py -o gt012345.json gt012345.fz
+    python3 fzreader.py -o gt012345.json gt012345.fz.bz2
 
 This file can then be read into Python. For example a crude script to calculate the pedestals and pedestal variances from pedestal events in the run is:
 
@@ -41,7 +48,7 @@ The library can be used to read `fz` files directly, skipping the conversion to 
     nped = 0
     ped_sum = numpy.zeros(492) # Hardcode for 490 pixel camera in this example
     ped_sum_sq = numpy.zeros(492)
-    with fzreader.FZReader('gt012345.fz') as fz:
+    with fzreader.FZReader('gt012345.fz.bz2') as fz:
         for r in fz:
             if(r['record_type']=='event' and r['event_type']=='pedestal'):
                 nped += 1
