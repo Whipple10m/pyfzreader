@@ -41,7 +41,7 @@ import subprocess
 # Can you modify this to automatically handle data in BZ2, gzip and UNIX compress format
 
 class FZReader:
-    def __init__(self, filename, verbose=False, verbose_file=None) -> None:
+    def __init__(self, filename, verbose=False, verbose_file=None, resynchronise_header = False) -> None:
         self.filename = filename
         if(not filename):
             raise RuntimeError('No filename given: ' + filename)
@@ -51,6 +51,7 @@ class FZReader:
         self.verbose_file = verbose_file
         self.vstream = sys.stdout
         self.end_of_run = False
+        self.resynchronise_header = resynchronise_header
         pass
 
     def __enter__(self):
@@ -90,17 +91,28 @@ class FZReader:
             return iocb&0xFFFF - 12;
 
     def _read_pdata(self):
-        pdata = self.file.read(4*4)
-        if(len(pdata) == 0):
-            return None, None # EOF
-        if(len(pdata) != 16):
-            raise RuntimeError('ZEBRA physical record MAGIC could not be read')
-        if(struct.unpack('>IIII',pdata) != (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)):
-            raise RuntimeError('ZEBRA physical record MAGIC not found')
+        ZEBRA_MAGIC = (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)
+        pdata = b''
+        nadjust = 0
+        while(len(pdata) != 32):
+            pdata += self.file.read(32-len(pdata))
+            if(len(pdata) == 0):
+                return None, None # EOF
+            if(len(pdata) != 32):
+                raise EOFError('ZEBRA physical record MAGIC and header could not be read')
+            if(struct.unpack('>IIII',pdata[:16]) == ZEBRA_MAGIC):
+                break
+            if(self.resynchronise_header):
+                pdata = pdata[1:]
+                nadjust += 1
+            else:
+                failed_magic = [f'{x:08x}' for x in struct.unpack('>IIII',pdata[:16])]
+                raise RuntimeError(f'ZEBRA physical record MAGIC not found. Values were {failed_magic}')
 
-        pdata = self.file.read(4*4)
-        if(len(pdata) != 16):
-            raise RuntimeError('ZEBRA physical record header could not be read')
+        if(self.verbose and nadjust>0):
+            print(f"PH: *WARNING* Adjusted header by {nadjust} bytes",file=self.vstream)
+        
+        pdata = pdata[16:]
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
@@ -108,7 +120,7 @@ class FZReader:
 
         pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
-            raise RuntimeError('ZEBRA physical packet data could not be read')
+            raise EOFError('ZEBRA physical packet data could not be read')
 
         return NWTOLR, pdata
 
@@ -192,7 +204,7 @@ class FZReader:
 
         if(len(ldata)<40):
             raise RuntimeError('ZEBRA logical record too short for header')
-        magic,QVERSIO,opt,zero,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = struct.unpack('>IIIIIIIIII',ldata[0:40])
+        magic,_,_,_,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = struct.unpack('>IIIIIIIIII',ldata[0:40])
         if(magic!=0x4640e400):
             raise RuntimeError('ZEBRA logical record MAGIC not found')
         NWBKST = NWLR - (10 + NWUHIO + NWSEG + NWTX + NWTAB)
@@ -235,13 +247,10 @@ class FZReader:
             print('-'*80,file=self.vstream)
             print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}',file=self.vstream)
 
-        NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, udata = self._read_udata()
+        NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
 
         if(not udata):
             return None
-
-        runno = 0
-        eventno = 0
 
         DSS = 0
 
