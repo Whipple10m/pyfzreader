@@ -44,7 +44,7 @@ class FZReader:
     def __init__(self, filename, verbose=False, verbose_file=None, resynchronise_header = False) -> None:
         self.filename = filename
         if(not filename):
-            raise RuntimeError('No filename given: ' + filename)
+            raise RuntimeError('No filename given')
         self.file = None
         self.saved_pdata = b''
         self.verbose = verbose
