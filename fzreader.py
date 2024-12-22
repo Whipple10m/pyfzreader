@@ -369,8 +369,8 @@ class FZReader:
 
     def _unpack_gdf_header(self, data, record_type):
         gdf_version, = struct.unpack('>I',data[0:4])
-        record_time_mjd, = struct.unpack('>d',data[16:24])
-        NW = 6 if gdf_version>=27 else 5 # It's 7/6 in the GDF FORTRAN code.. but they start from 1
+        NW=6 if gdf_version>=27 else 5 # 7/6 in FORTRAN but they start at 1
+        record_time_mjd, = struct.unpack('>d',data[(NW-2)*4:NW*4])
         record = dict(
             record_type         = record_type,
             record_time_mjd     = self._mjd_cleaned(record_time_mjd),
@@ -641,10 +641,16 @@ class FZReader:
             onoff_offset_ra_hms_str     = self._hms_string(onoff_offset_ra),
             onoff_offset_dec_deg        = onoff_offset_dec * DEG,
             onoff_offset_dec_dms_str    = self._dms_string(onoff_offset_dec),
-            sidereal_time_hours         = sidereal_time * HRS,
-            sidereal_time_hms_str       = self._hms_string(sidereal_time),
             target                      = target.strip()    
         ))
+
+        if(record['gdf_version'] > 67):
+            # Sidereal time incorrect until after version 67 (OK by v80)
+            record.update(dict(
+                sidereal_time_hours         = sidereal_time * HRS,
+                sidereal_time_hms_str       = self._hms_string(sidereal_time)
+            ))
+
         return record
 
 if __name__ == '__main__':
