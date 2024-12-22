@@ -150,8 +150,8 @@ The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572
 - `'onoff_offset_ra_hms_str'`: right-ascension offset between ON and OFF runs as printable string in format `'HHhMMmSS.Ss'`, e.g. `'00h30m00.0s'`
 - '`onoff_offset_dec_deg`': declination offset between ON and OFF runs in degrees.
 - `'onoff_offset_dec_dms_str'`: declination offset between ON and OFF runs as printable string in format `'+/-DDDdMMmSS.Ss'`, e.g. `'+00h00m00.0s'`
-- `'sidereal_time_hours'`: local sidereal time in hours.
-- `'sidereal_time_hms_str'`: local sidereal time as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.7s'`.
+- `'sidereal_time_hours'`: local sidereal time in hours. Only present if `gdf_version>67`.
+- `'sidereal_time_hms_str'`: local sidereal time as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.7s'`. Only present if `gdf_version>67`.
 - `'target'`: string giving name of target
 
 Other data items present in the FORTRAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
