@@ -395,19 +395,64 @@ class FZReader:
         epoch_time = max(round((mjd-40587.0)*86400000)*0.001,0)
         return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
 
+    def _decode_truetime(self, grs_time_10MHz, grs_time, grs_day):
+        grs_utc_isec = ((grs_time >> 20) & 0xF) * 36000 + \
+                       ((grs_time >> 16) & 0xF) * 3600 + \
+                       ((grs_time >> 12) & 0xF) * 600 + \
+                       ((grs_time >>  8) & 0xF) * 60 + \
+                       ((grs_time >>  4) & 0xF) * 10 + \
+                       ((grs_time      ) & 0xF)
+        
+        grs_day_of_year = ((grs_day >> 8) & 0xF) * 100 + \
+                          ((grs_day >> 4) & 0xF) * 10 + \
+                          ((grs_day     ) & 0xF)
+
+        grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
+
+        grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
+
+        return grs_day_of_year, grs_utc_time_sec, grs_utc_time_str
+
+    def _decode_gps(self, gps_low, gps_mid, gps_high):
+        # Decode old Whipple GPS (See GPSTIME from fz2red)
+
+        gps_day_of_year = ((gps_high >> 14) & 0xF) * 100 + \
+                          ((gps_high >> 10) & 0xF) * 10 + \
+                          ((gps_high >>  6) & 0xF)
+
+        gps_ms = ((gps_mid  & 0x3) <<  2) * 100 + \
+                 ((gps_low  >> 14) & 0x3) * 100 + \
+                 ((gps_low  >> 10) & 0xF) * 10 + \
+                 ((gps_low  >>  6) & 0xF)
+
+
+        gps_utc_time_sec = ((gps_high >>  4) & 0x3) * 36000 + \
+                           ((gps_high      ) & 0xF) * 3600 + \
+                           ((gps_mid  >> 13) & 0x7) * 600 + \
+                           ((gps_mid  >>  9) & 0xF) * 60 + \
+                           ((gps_mid  >>  6) & 0x7) * 10 + \
+                           ((gps_mid  >>  2) & 0xF) + gps_ms*0.001
+
+        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_ms:03d}'
+
+        return gps_day_of_year, gps_utc_time_sec, gps_utc_time_str
+
     def _decode_ette(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'event')
-           
+        
+        version_dependent_elements = dict()
+
         if(record['gdf_version'] >= 74):
             NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
             nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
             ntrigger, elaptime_sec, elaptime_ns = block_values[13:16]
-            grs_time_10MHz, grs_time, grs_day = block_values[16:19]
+            grs_data_10MHz, grs_data_time, grs_data_day = block_values[16:19]
 
             NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
-            trigger = block_values[0]
+            trigger_code = block_values[0]
+            event_type = 'pedestal' if trigger_code==1 else 'sky'
 
             trigger_data = ()
             if(ntrigger>0):
@@ -419,43 +464,21 @@ class FZReader:
                 NW, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
                 NFIRST += NW
 
-            grs_utc_isec = ((grs_time&0x00F00000) >> 20)*36000 + \
-                        ((grs_time&0x000F0000) >> 16)*3600 + \
-                        ((grs_time&0x0000F000) >> 12)*600 + \
-                        ((grs_time&0x00000F00) >> 8)*60 + \
-                        ((grs_time&0x000000F0) >> 4)*10 + \
-                        ((grs_time&0x0000000F) >> 0)
-            
-            grs_doy = ((grs_day&0x00000F00) >> 8)*100 + \
-                    ((grs_day&0x000000F0) >> 4)*10 + \
-                    ((grs_day&0x0000000F) >> 0)
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_truetime(
+                grs_data_10MHz, grs_data_time, grs_data_day)
 
-            grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
-
-            grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
-            
-            record.update(dict(
-                record_was_decoded  = True,
-                run_num             = run_num, 
-                event_num           = event_num, 
-                livetime_sec        = livetime_sec, 
-                livetime_ns         = livetime_ns,
+            version_dependent_elements = dict(
                 elaptime_sec        = elaptime_sec,
                 elaptime_ns         = elaptime_ns,
-                grs_data            = [ grs_time_10MHz, grs_time, grs_day ],
-                grs_doy             = grs_doy,
-                grs_utc_time_sec    = grs_utc_time_sec,
-                grs_utc_time_str    = grs_utc_time_str,
-                event_type          = 'pedestal' if trigger==1 else 'sky',
-                nadc                = nadc,
+                grs_data            = [ grs_data_10MHz, grs_data_time, grs_data_day ],
                 ntrigger            = ntrigger,
                 trigger_data        = trigger_data,
-                adc_values          = adc_values
-            ))
+            )
         else:
             NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
-            trigger = block_values[0]
+            trigger_code = block_values[0]
+            event_type = 'pedestal' if trigger_code==1 else 'sky'
 
             NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             NFIRST += NW
@@ -467,24 +490,36 @@ class FZReader:
 
                 NW, block_values = self._unpack_block_I16(NFIRST, NDW, data)
                 NFIRST += NW
-                gps_clock = block_values[0:3]
+                gps_data_mid, gps_data_high, _, gps_data_low = block_values[0:4]
             else:
                 NFIRST += 1
-                gps_clock = struct.unpack('>3H',data[NFIRST*4:NFIRST*4+6])
+                gps_data_mid, gps_data_high, _, gps_data_low = struct.unpack('>4H',data[NFIRST*4:NFIRST*4+8])
                 NFIRST += 2
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
-            record.update(dict(
-                record_was_decoded  = True,
-                run_num             = run_num, 
-                event_num           = event_num, 
-                livetime_sec        = livetime_sec, 
-                livetime_ns         = livetime_ns,
-                event_type          = 'pedestal' if trigger==1 else 'sky',
-                gps_clock           = gps_clock,   
-                nadc                = nadc,
-                adc_values          = adc_values
-            ))
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
+                gps_data_low, gps_data_mid, gps_data_high)
+            
+            version_dependent_elements = dict(
+                gps_data           = ( gps_data_low, gps_data_mid, gps_data_high ),   
+            )
+
+        record.update(dict(
+            record_was_decoded  = True,
+            run_num             = run_num, 
+            event_num           = event_num, 
+            livetime_sec        = livetime_sec, 
+            livetime_ns         = livetime_ns,
+            gps_day_of_year     = gps_day_of_year,
+            gps_utc_time_sec    = gps_utc_time_sec,
+            gps_utc_time_str    = gps_utc_time_str,
+            trigger_code        = trigger_code,
+            event_type          = event_type,
+            nadc                = nadc,
+            adc_values          = adc_values
+        ))
+
+        record.update(version_dependent_elements)
 
         return record
 
