@@ -541,6 +541,7 @@ class FZReader:
     def _decode_hvvh(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'hv')
         if(record['gdf_version'] < 67):
+           # GDF library ignores HV bank if version < 67
            return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
