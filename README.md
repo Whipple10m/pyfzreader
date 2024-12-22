@@ -134,7 +134,7 @@ The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572
 - `'record_time_mjd'`: see above.
 - `'record_time_str'`: see above. 
 - `'gdf_version'`: see above.
-- `'record_was_decoded'`: `True` if `gdf_version>=80`. Otherwise `False`, in which case the following elements will not be in the dictionary.
+- `'record_was_decoded'`: `True`, the reader can decode all known versions of the GDF tracking data.
 - `'mode`': tracking mode, one of `'on'`, `'off'`, `'slewing'`, `'standby`, `'zenith'`, `'check'`, `'stowing'`, `'drift'`, or `'unknown'`.
 - `'mode_code'`: integer code corresponding to mode
 - `'read_cycle'`: integer giving cycle number of information transferred by tracking system.
