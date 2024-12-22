@@ -598,8 +598,6 @@ class FZReader:
 
     def _decode_trrt(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'tracking')
-        if(record['gdf_version'] < 80):
-           return record
 
         NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
         NFIRST += NW
