@@ -337,6 +337,15 @@ class FZReader:
             print(file=self.vstream)
         return
 
+    def _skip_block(self, NFIRST, NDW, data):
+        if(NFIRST >= NDW):
+            raise RuntimeError(f'GDF bank data does not have block header: {NFIRST} >= {NDW}')
+        block_header, = struct.unpack('>I',data[NFIRST*4:(NFIRST+1)*4])
+        NW = block_header>>4
+        if(NFIRST+NW >= NDW):
+            raise RuntimeError(f'GDF bank data does not have full block: {NFIRST+NW} >= {NDW}')
+        return NFIRST+NW+1
+
     def _unpack_block(self, NFIRST, NDW, data, datum_code, datum_len):
         if(NFIRST >= NDW):
             raise RuntimeError(f'GDF bank data does not have block header: {NFIRST} >= {NDW}')
@@ -350,7 +359,7 @@ class FZReader:
             print(f"BBH: NW={NW}",block_values,file=self.vstream)
         elif(self.verbose):
             print(f"BBH: NW={NW}",file=self.vstream)
-        return NW+1, block_values
+        return NFIRST+NW+1, block_values
     
     def _unpack_block_I32(self, NFIRST, NDW, data):
         return self._unpack_block(NFIRST, NDW, data, 'I', 4)
@@ -443,26 +452,22 @@ class FZReader:
         version_dependent_elements = dict()
 
         if(record['gdf_version'] >= 74):
-            NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
             ntrigger, elaptime_sec, elaptime_ns = block_values[13:16]
             grs_data_10MHz, grs_data_time, grs_data_day = block_values[16:19]
 
-            NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             trigger_code = block_values[0]
             event_type = 'pedestal' if trigger_code==1 else 'sky'
 
             trigger_data = ()
             if(ntrigger>0):
-                NW, trigger_data = self._unpack_block_I32(NFIRST, NDW, data)
-                NFIRST += NW
+                NFIRST, trigger_data = self._unpack_block_I32(NFIRST, NDW, data)
 
             adc_values = ()
             if(nadc>0):
-                NW, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
-                NFIRST += NW
+                NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
 
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_truetime(
                 grs_data_10MHz, grs_data_time, grs_data_day)
@@ -475,21 +480,17 @@ class FZReader:
                 trigger_data        = trigger_data,
             )
         else:
-            NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             trigger_code = block_values[0]
             event_type = 'pedestal' if trigger_code==1 else 'sky'
 
-            NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
             nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
 
             if(record['gdf_version'] >= 27):
-                NW, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
-                NFIRST += NW
+                NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
 
-                NW, block_values = self._unpack_block_I16(NFIRST, NDW, data)
-                NFIRST += NW
+                NFIRST, block_values = self._unpack_block_I16(NFIRST, NDW, data)
                 gps_data_mid, gps_data_high, _, gps_data_low = block_values[0:4]
             else:
                 NFIRST += 1
@@ -523,34 +524,71 @@ class FZReader:
 
         return record
 
+    def _decode_fttf(self, NDW, data):
+        NFIRST, record = self._unpack_gdf_header(data, 'frame')
+
+        if(record['gdf_version'] < 74):
+            # Only support frame data before version 74
+
+            NFIRST = self._skip_block(NFIRST, NDW, data) # STATUS
+
+            NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
+            _, nadc, _, run_num, frame_num = block_values[0:5]
+
+            if(record['gdf_version'] >= 27):
+                NFIRST = self._skip_block(NFIRST, NDW, data) # CAL_ADC unused
+                NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data) # PED_ADC1
+                NFIRST = self._skip_block(NFIRST, NDW, data) # PED_ADC2 unused
+                NFIRST = self._skip_block(NFIRST, NDW, data) # SCALC unused
+                NFIRST = self._skip_block(NFIRST, NDW, data) # SCALS unused
+                NFIRST, block_values = self._unpack_block_I16(NFIRST, NDW, data)
+                gps_data_mid, gps_data_high, _, gps_data_low = block_values[0:4]
+            else:
+                NFIRST += 1
+                gps_data_mid, gps_data_high, _, gps_data_low = struct.unpack('>4H',data[NFIRST*4:NFIRST*4+8])
+                NFIRST += 70
+                adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
+
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
+                gps_data_low, gps_data_mid, gps_data_high)
+            
+            record.update(dict(
+                record_was_decoded  = True,
+                run_num             = run_num, 
+                frame_num           = frame_num, 
+                gps_day_of_year     = gps_day_of_year,
+                gps_utc_time_sec    = gps_utc_time_sec,
+                gps_utc_time_str    = gps_utc_time_str,
+                event_type          = 'pedestal',
+                nadc                = nadc,
+                adc_values          = adc_values,
+                gps_data           = ( gps_data_low, gps_data_mid, gps_data_high ),   
+            ))
+
+        return record
+
     def _decode_ruur(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'run')
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
-        NFIRST += NW
+        NFIRST = self._skip_block(NFIRST, NDW, data) # STATUS
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         run_num = block_values[3]
         sky_quality = block_values[5]
         trig_mode = block_values[6]
         comment_len = block_values[12]
 
-        NW, block_values = self._unpack_block_F32(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_F32(NFIRST, NDW, data)
         sid_length = block_values[0]
 
-        NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_F64(NFIRST, NDW, data)
         nominal_mjd_start, nominal_mjd_end = block_values
 
         if(record['gdf_version'] >= 27):
-            NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_S(NFIRST, NDW, data)
             observers = self._bytes_to_string(block_values[0][80:])
 
-            NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, block_values = self._unpack_block_S(NFIRST, NDW, data)
             comment = self._bytes_to_string(block_values[0])
         else:
             NFIRST += 1
@@ -579,8 +617,7 @@ class FZReader:
            # GDF library ignores HV bank if version < 67
            return record
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         _, mode_code, num_channels, read_cycle = block_values
 
         status = ()
@@ -589,20 +626,15 @@ class FZReader:
         i_supply = ()
         i_anode = ()
         if(num_channels > 0):
-            NW, status = self._unpack_block_I16(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, status = self._unpack_block_I16(NFIRST, NDW, data)
 
-            NW, v_set = self._unpack_block_F32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, v_set = self._unpack_block_F32(NFIRST, NDW, data)
 
-            NW, v_actual = self._unpack_block_F32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, v_actual = self._unpack_block_F32(NFIRST, NDW, data)
 
-            NW, i_supply = self._unpack_block_F32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, i_supply = self._unpack_block_F32(NFIRST, NDW, data)
 
-            NW, i_anode = self._unpack_block_F32(NFIRST, NDW, data)
-            NFIRST += NW
+            NFIRST, i_anode = self._unpack_block_F32(NFIRST, NDW, data)
 
         record.update(dict(
             record_was_decoded  = True,
@@ -615,11 +647,6 @@ class FZReader:
             i_supply            = i_supply,
             i_anode             = i_anode
         ))
-        return record
-
-    def _decode_fttf(self, NDW, data):
-        NFIRST, record = self._unpack_gdf_header(data, 'frame')
-        # Ignore 10m frames for the moment, they weren't used in the 490 pixel camera
         return record
 
     def _hms_string(self, angle_rad):
@@ -635,22 +662,18 @@ class FZReader:
     def _decode_trrt(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'tracking')
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data) # unused
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         mode, read_cycle = block_values[1:3]
 
-        NW, block_values = self._unpack_block_I32(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data)
         status = block_values[0]
 
-        NW, block_values = self._unpack_block_F64(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_F64(NFIRST, NDW, data)
         target_ra, target_dec = block_values[2:4]
         telescope_az, telescope_el, tracking_error = block_values[6:9]
         onoff_offset_ra, onoff_offset_dec, sidereal_time = block_values[9:12]
 
-        NW, block_values = self._unpack_block_S(NFIRST, NDW, data)
-        NFIRST += NW
+        NFIRST, block_values = self._unpack_block_S(NFIRST, NDW, data)
         target = self._bytes_to_string(block_values[0])
 
         DEG = 180.0/3.14159265358979324
