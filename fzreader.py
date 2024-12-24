@@ -321,6 +321,8 @@ class FZReader:
             return self._decode_fttf(NDW, udata[DSS*4:])
         elif(HBID == 0x54525254): # TRRT - Tracking information
             return self._decode_trrt(NDW, udata[DSS*4:])
+        elif(HBID == 0x43434343): # CCCC - CCD information
+            return self._decode_cccc(NDW, udata[DSS*4:])
 
         return dict(record_type     = 'unknown',
                     bank_id         = struct.pack('I',HBID).decode("utf-8"))
@@ -469,13 +471,14 @@ class FZReader:
             if(nadc>0):
                 NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
 
+            gps_truetime = True
+            gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_truetime(
                 grs_data_10MHz, grs_data_time, grs_data_day)
 
             version_dependent_elements = dict(
                 elaptime_sec        = elaptime_sec,
                 elaptime_ns         = elaptime_ns,
-                grs_data            = [ grs_data_10MHz, grs_data_time, grs_data_day ],
                 ntrigger            = ntrigger,
                 trigger_data        = trigger_data,
             )
@@ -498,12 +501,10 @@ class FZReader:
                 NFIRST += 2
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
+            gps_truetime = False
+            gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
-            
-            version_dependent_elements = dict(
-                gps_data           = ( gps_data_low, gps_data_mid, gps_data_high ),   
-            )
 
         record.update(dict(
             record_was_decoded  = True,
@@ -511,6 +512,8 @@ class FZReader:
             event_num           = event_num, 
             livetime_sec        = livetime_sec, 
             livetime_ns         = livetime_ns,
+            gps_truetime        = gps_truetime,
+            gps_data            = gps_data,
             gps_day_of_year     = gps_day_of_year,
             gps_utc_time_sec    = gps_utc_time_sec,
             gps_utc_time_str    = gps_utc_time_str,
@@ -549,6 +552,8 @@ class FZReader:
                 NFIRST += 70
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
+            gps_truetime = False
+            gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
             
@@ -556,13 +561,14 @@ class FZReader:
                 record_was_decoded  = True,
                 run_num             = run_num, 
                 frame_num           = frame_num, 
+                gps_truetime        = gps_truetime,
+                gps_data            = gps_data,
                 gps_day_of_year     = gps_day_of_year,
                 gps_utc_time_sec    = gps_utc_time_sec,
                 gps_utc_time_str    = gps_utc_time_str,
                 event_type          = 'pedestal',
                 nadc                = nadc,
                 adc_values          = adc_values,
-                gps_data           = ( gps_data_low, gps_data_mid, gps_data_high ),   
             ))
 
         return record
@@ -709,6 +715,10 @@ class FZReader:
                 sidereal_time_hms_str       = self._hms_string(sidereal_time)
             ))
 
+        return record
+
+    def _decode_cccc(self, NDW, data):
+        NFIRST, record = self._unpack_gdf_header(data, 'ccd')
         return record
 
 if __name__ == '__main__':
