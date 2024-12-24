@@ -471,7 +471,7 @@ class FZReader:
             if(nadc>0):
                 NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data)
 
-            gps_truetime = True
+            gps_truetime_grs = True
             gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_truetime(
                 grs_data_10MHz, grs_data_time, grs_data_day)
@@ -501,7 +501,7 @@ class FZReader:
                 NFIRST += 2
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
-            gps_truetime = False
+            gps_truetime_grs = False
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
@@ -512,7 +512,7 @@ class FZReader:
             event_num           = event_num, 
             livetime_sec        = livetime_sec, 
             livetime_ns         = livetime_ns,
-            gps_truetime        = gps_truetime,
+            gps_truetime_grs    = gps_truetime_grs,
             gps_data            = gps_data,
             gps_day_of_year     = gps_day_of_year,
             gps_utc_time_sec    = gps_utc_time_sec,
@@ -552,7 +552,7 @@ class FZReader:
                 NFIRST += 70
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
-            gps_truetime = False
+            gps_truetime_grs = False
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
@@ -561,7 +561,7 @@ class FZReader:
                 record_was_decoded  = True,
                 run_num             = run_num, 
                 frame_num           = frame_num, 
-                gps_truetime        = gps_truetime,
+                gps_truetime_grs    = gps_truetime_grs,
                 gps_data            = gps_data,
                 gps_day_of_year     = gps_day_of_year,
                 gps_utc_time_sec    = gps_utc_time_sec,

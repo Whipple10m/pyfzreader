@@ -104,7 +104,7 @@ The [GDF 10m event structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 
 - `'record_type'`: `'event'`.
 - `'record_time_mjd'`: see above.
-- `'record_time_str'`: see above. 
+- `'record_time_str'`: see above.
 - `'gdf_version'`: see above.
 - `'record_was_decoded'`: `True`, the reader can decode all known versions of the GDF 10m event.
 - `'run_num'`: see above.
@@ -113,8 +113,8 @@ The [GDF 10m event structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 - `'livetime_ns'`: number of nanoseconds counted by 10MHz livetime scaler since last 1-second marker.
 - `'elaptime_sec'`: number of seconds counted by 10MHz elapsed time scaler since start of run. Only present if `gdf_version>=74`.
 - `'elaptime_ns'`: number of nanoseconds counted by 10MHz elapsed time scaler since last 1-second marker. Only present if `gdf_version>=74`.
-- `'gps_truetime'`: `True` if GPS data is provided by Truetime XL-AK clock, `False` otherwise, indicating data comes from the older GPS clock.
-- `'gps_data'`: raw data provided by GRS clock. Format depends on clock used (see `'gps_truetime'` element, above).
+- `'gps_truetime_grs'`: `True` if GPS data is provided by Truetime XL-DC/XL-AK clock with the Wisconsin GRS CAMAC interface, `False` otherwise, indicating data comes from the Michigan CAMAC clock interface.
+- `'gps_data'`: raw data provided by GRS clock. Format depends on clock used (see `'gps_truetime_grs'` element, above).
 - `'gps_doy'`: the day of year decoded from the GPS system.
 - `'gps_utc_time_sec'`: the number of seconds and fraction of seconds decoded from the GPS system.
 - `'gps_utc_time_str'`: the time from the GPS system in string format `'hh:mm:ss.sssssss'`.
@@ -137,7 +137,7 @@ Before GDF version 74 the on-the-fly calibration data were recorded in the [GDF 
 - `'record_was_decoded'`: `True` if `gdf_version<74`. Otherwise `False`, in which case none of the following elements will be present.
 - `'run_num'`: see above.
 - `'frame_num'`: event number, starting at one.
-- `'gps_truetime'`: `False`, see above.
+- `'gps_truetime_grs'`: `False`, see above.
 - `'gps_data'`: see above.
 - `'gps_day_of_year'`: see above.
 - `'gps_utc_time_sec'`: see above.
