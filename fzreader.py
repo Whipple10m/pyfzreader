@@ -54,7 +54,7 @@ class FZReader:
         records in the file.
 
         Example:
-            with FZReader('data.fz') as reader:
+            with FZReader('data.fz.gz') as reader:
                 for record in reader:
                     print(record)
         
@@ -80,6 +80,10 @@ class FZReader:
             measurements for each of the channels.
         - CCD information: recognized but not decoded.
 
+        See the README.md file for details of the fields returned for each
+        of the GDF records supported.
+
+        https://github.com/Whipple10m/pyfzreader/blob/main/README.md
 
     Methods:
         read(): Read the next record from the file.
