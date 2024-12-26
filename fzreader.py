@@ -36,6 +36,25 @@ import sys
 import bz2
 import gzip
 import subprocess
+import json
+
+_camera_cache = None
+
+def get_camera_geometry_by_nadc(nadc):
+    """
+    Get the camera configuration corresponding to the given nadc value.
+
+    Args:
+        nadc (int): The number of ADC channels.
+
+    Returns:
+        dict: The camera configuration corresponding to the given nadc value.
+    """
+    global _camera_cache
+    if _camera_cache is None:
+        with open('whipple_cams.json', 'r') as f:
+            _camera_cache = json.load(f)
+    return _camera_cache.get(str((nadc+11)//12*12))
 
 class FZReader:
     """
