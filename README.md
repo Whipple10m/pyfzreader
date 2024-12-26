@@ -88,7 +88,7 @@ The [GDF run header structure](https://github.com/Whipple10m/GDF/blob/24572fc741
 - `'gdf_version'`: see above.
 - `'record_was_decoded'`: `True`, the reader can decode all known versions of the GDF run header.
 - `'run_num'`: the run number.
-- `'sky_quality'`: the sky quality noted by the observers, if they remembered to update it. Should be `A`, `B` or `C`, but can also be `?` if the value is invalid.
+- `'sky_quality'`: the sky quality noted by the observers, if they remembered to update it. Should be `'A'`, `'B'` or `'C'`, but can also be `'?'` if the value is invalid.
 - `'sid_length'`: the nominal length of the run in sidereal minutes.
 - `'trigger_mode'`: value that describes the trigger mode (I don't recall what it corresponds to).
 - `'nominal_mjd_start'`: nominal start time of the run in MJD.
