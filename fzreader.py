@@ -167,7 +167,10 @@ class FZReader:
 
     def __next__(self):
         """
-        Return the next record from the file.
+        Return the next record from the file. 
+        
+        See the `read` method for details of the records returned and 
+        exceptions raised.
 
         Returns:
             dict: The next record.
@@ -188,6 +191,18 @@ class FZReader:
             dict: The next record, or None if there are no more records.
                 See the README.md file for details of what is returned
                 for each of the GDF records supported.
+
+        Raises:
+            EOFError: If the GDF file is incomplete, i.e. if the file ends 
+                abruptly while decoding a ZEBRA physical or logical
+                record, or the end-of-file record is not found before the
+                end of the data.
+
+            RuntimeError: If the ZEBRA physical record MAGIC is not found,
+                or some other error occurs while decoding the ZEBRA physical
+                or logical record. In this case the `resynchronise_header`
+                option may allow the reader to continue reading the file,
+                but the data may be corrupted.
         """
         if(self.verbose):
             print('-'*80,file=self.vstream)
