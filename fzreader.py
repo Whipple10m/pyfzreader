@@ -1,35 +1,34 @@
 # fzreader.py - Stephen Fegan - 2024-11-08
-#
-# Read Whipple 10m data in GDF/ZEBRA format into Python
-#
+
 # The Granite data format (GDF) uses the CERN ZEBRA package to store Whipple
-# events in data banks. ZEBRA consists of three layers : physical, logical and
+# events in data banks. ZEBRA consists of three layers: physical, logical, and
 # data bank, each of which have headers that must be decoded. The ZEBRA format
 # is described by "Overview of the ZEBRA System" (CERN Program Library Long 
 # Writeups Q100/Q101), and in particular Chapter 10 describes the layout of the
 # headers and data in "exchange mode".
-# 
+
 # https://cds.cern.ch/record/2296399/files/zebra.pdf
-#
+
 # Inside the data banks, the GDF code, written by Joachim Rose at Leeds,
 # directs the writing of the individual data elements in blocks of data all of
 # whom have the same data type (blocks of I32, blocks of I16 etc.). See for 
 # example the function GDF$EVENT10 and observe the calls to GDF$MOVE
-#
+
 # https://github.com/Whipple10m/GDF/blob/main/gdf.for
-#
-# Copyright 2024, Stephen Fegan <sfegan@llr.in2p3.fr>
-# Laboratoire Leprince-Ringuet, CNRS/IN2P3, Ecole Polytechnique, Institut Polytechnique de Paris
-#
+
 # This file is part of "pyfzreader"
-#
+
 # "pyfzreader" is free software: you can redistribute it and/or modify it under the
 # terms of the GNU General Public License version 2 or later, as published by
 # the Free Software Foundation.
-#
+
 # "pyfzreader" is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 # A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+"""
+Read Whipple 10m data in GDF/ZEBRA format into Python.
+"""
 
 import struct
 import time
@@ -38,10 +37,78 @@ import bz2
 import gzip
 import subprocess
 
-# Can you modify this to automatically handle data in BZ2, gzip and UNIX compress format
-
 class FZReader:
+    """
+    A class to read Whipple 10m data in GDF/ZEBRA format.
+
+    The FZReader class provides functionality to read and decode 
+    Whipple 10m data stored in GDF/ZEBRA format. It supports various 
+    compressed file formats such as bzip2, gzip, and LZW, as well as 
+    uncompressed files.
+
+    Usage:
+        The primary way to use the FZReader is through the `read` 
+        method or by iterating over the FZReader object. The `read` 
+        method returns the next record from the file, while the 
+        iterator interface allows for easy iteration over all 
+        records in the file.
+
+        Example:
+            with FZReader('data.fz') as reader:
+                for record in reader:
+                    print(record)
+        
+        Alternatively, you can use the `read` method directly:
+            with FZReader('data.fz') as reader:
+                record = reader.read()
+                while record:
+                    print(record)
+                    record = reader.read()
+    
+    Recognized GDF Records:
+        - Event data: including an array of ADC values, event number, type, 
+            timestamps, and trigger code.
+        - Frame data: supported for older GDF files where the pedestal and
+            calibration data were separated from the event data. Returns the
+            ADC data, frame number, and timestamps.
+        - Run headers: including the run number, run start and stop times,
+            and various comments entered by the observers.
+        - Tracking information: including the tracking mode, name and 
+            coordinates of the target (RA and Dec), position of the telescope
+            in the sky (Az, El), and timestamp.
+        - High voltage settings: including the high voltage settings and 
+            measurements for each of the channels.
+        - CCD information: recognized but not decoded.
+
+
+    Methods:
+        read(): Read the next record from the file.
+
+    Attributes:
+        filename (str): The name of the FZ file to read. This can be 
+            bzip2 (.bz2), gzip (.gz or .fzg), LZW (.Z or .fzz), or 
+            uncompressed (any other extension).
+        verbose (bool): If True, print verbose output, primarily for 
+            diagnosing the decoding of the ZEBRA/GDF data elements.
+        verbose_file (str): The file to write verbose output to (default 
+            is None, corresponding to stdout).
+        resynchronise_header (bool): If True, resynchronise the header.
+    """
+
     def __init__(self, filename, verbose=False, verbose_file=None, resynchronise_header = False) -> None:
+        """
+        Initialize the FZReader.
+
+        Args:
+            filename (str): The name of the FZ file to read. This can be 
+                bzip2 (.bz2), gzip (.gz or .fzg), LZW (.Z or .fzz), or 
+                uncompressed (any other extension).
+            verbose (bool): If True, print verbose output, primarily for 
+                diagnosing the decoding of the ZEBRA/GDF data elements.
+            verbose_file (str): The file to write verbose output to (default 
+                is None, corresponding to stdout).
+            resynchronise_header (bool): If True, resynchronise the header.
+        """
         self.filename = filename
         if(not filename):
             raise RuntimeError('No filename given')
@@ -55,6 +122,12 @@ class FZReader:
         pass
 
     def __enter__(self):
+        """
+        Enter the runtime context related to this object.
+
+        Returns:
+            FZReader: The FZReader object.
+        """
         if self.filename.endswith('.bz2'):
             self.file = bz2.open(self.filename, 'rb')
         elif self.filename.endswith('.gz') or self.filename.endswith('.fzg'):
@@ -69,6 +142,14 @@ class FZReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Exit the runtime context related to this object.
+
+        Args:
+            exc_type (type): The exception type.
+            exc_val (Exception): The exception value.
+            exc_tb (traceback): The traceback object.
+        """
         if self.file:
             self.file.close()
         if self.vstream is not sys.stdout:
@@ -76,13 +157,121 @@ class FZReader:
         self.vstream = sys.stdout
 
     def __iter__(self):
+        """
+        Return the iterator object itself.
+
+        Returns:
+            FZReader: The FZReader object.
+        """
         return self
 
     def __next__(self):
+        """
+        Return the next record from the file.
+
+        Returns:
+            dict: The next record.
+
+        Raises:
+            StopIteration: If there are no more records.
+        """
         record = self.read()
         if not record:
             raise StopIteration
         return record
+
+    def read(self):
+        """
+        Read the next record from the file.
+
+        Returns:
+            dict: The next record, or None if there are no more records.
+                See the README.md file for details of what is returned
+                for each of the GDF records supported.
+        """
+        if(self.verbose):
+            print('-'*80,file=self.vstream)
+            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}',file=self.vstream)
+
+        NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
+
+        if(not udata):
+            return None
+
+        DSS = 0
+
+        if(NWUH>0):
+            if(self.verbose):
+                print(f"UH:",end="",file=self.vstream)
+                for i in range(NWUH):
+                    x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                    if(i):
+                        print(",",end="",file=self.vstream)
+                    print(f" UH({i})={x}",end="",file=self.vstream)
+                print(file=self.vstream)
+            if(NWUH==2):
+                runno, eventno = struct.unpack('>II',udata[DSS:DSS+8])
+        DSS += NWUH
+
+        if(self.verbose and NWSEG>0):
+            print(f"ST:",end="",file=self.vstream)
+            for i in range(NWSEG):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="",file=self.vstream)
+                print(f" ST({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
+        DSS += NWSEG
+
+        if(self.verbose and NWTX>0):
+            print(f"TV:",end="",file=self.vstream)
+            for i in range(NWTX):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="",file=self.vstream)
+                print(f" TV({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
+        DSS += NWTX
+
+        if(self.verbose and NWTAB>0):
+            print(f"RT:",end="",file=self.vstream)
+            for i in range(NWTAB):
+                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
+                if(i):
+                    print(",",end="",file=self.vstream)
+                print(f" RT({i})={x}",end="",file=self.vstream)
+            print(file=self.vstream)
+        DSS += NWTAB
+
+        IOCB, = struct.unpack('>I',udata[DSS*4:(DSS+1)*4])
+        NIO = self._nio(IOCB)
+        DSS += 1+NIO
+
+        NXTPTR,UPPTR,ORIGPTR,NBID,HBID,NLINK,NSTRUCLINK,NDW,STATUS = struct.unpack('>IIIIIIIII',udata[DSS*4:(DSS+9)*4])
+        DSS += 9
+
+        if(self.verbose):
+            HBID_str = struct.pack('I',HBID).decode("utf-8")
+            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}",file=self.vstream)
+
+        if(self.verbose=='max'):
+            self._print_record(NDW, udata[DSS*4:])
+
+        if(HBID == 0x45545445): # ETTE - 10m event
+            return self._decode_ette(NDW, udata[DSS*4:])
+        elif(HBID == 0x52555552): # RUUR - Run header
+            return self._decode_ruur(NDW, udata[DSS*4:])
+        elif(HBID == 0x48565648): # HVVH - High voltage settings
+            return self._decode_hvvh(NDW, udata[DSS*4:])
+        elif(HBID == 0x46545446): # FTTF - 10m frame
+            return self._decode_fttf(NDW, udata[DSS*4:])
+        elif(HBID == 0x54525254): # TRRT - Tracking information
+            return self._decode_trrt(NDW, udata[DSS*4:])
+        elif(HBID == 0x43434343): # CCCC - CCD information
+            return self._decode_cccc(NDW, udata[DSS*4:])
+
+        return dict(record_type     = 'unknown',
+                    bank_id         = struct.pack('I',HBID).decode("utf-8"))
 
     def _nio(self, iocb):
         if(iocb < 12):
@@ -241,91 +430,6 @@ class FZReader:
         NWBKST = NWLR - (10 + NWIO + NWUH + NWSEG + NWTX + NWTAB)
 
         return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[(10+NWIO)*4:]
-
-    def read(self):
-        if(self.verbose):
-            print('-'*80,file=self.vstream)
-            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}',file=self.vstream)
-
-        NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
-
-        if(not udata):
-            return None
-
-        DSS = 0
-
-        if(NWUH>0):
-            if(self.verbose):
-                print(f"UH:",end="",file=self.vstream)
-                for i in range(NWUH):
-                    x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                    if(i):
-                        print(",",end="",file=self.vstream)
-                    print(f" UH({i})={x}",end="",file=self.vstream)
-                print(file=self.vstream)
-            if(NWUH==2):
-                runno, eventno = struct.unpack('>II',udata[DSS:DSS+8])
-        DSS += NWUH
-
-        if(self.verbose and NWSEG>0):
-            print(f"ST:",end="",file=self.vstream)
-            for i in range(NWSEG):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" ST({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWSEG
-
-        if(self.verbose and NWTX>0):
-            print(f"TV:",end="",file=self.vstream)
-            for i in range(NWTX):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" TV({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWTX
-
-        if(self.verbose and NWTAB>0):
-            print(f"RT:",end="",file=self.vstream)
-            for i in range(NWTAB):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" RT({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWTAB
-
-        IOCB, = struct.unpack('>I',udata[DSS*4:(DSS+1)*4])
-        NIO = self._nio(IOCB)
-        DSS += 1+NIO
-
-        NXTPTR,UPPTR,ORIGPTR,NBID,HBID,NLINK,NSTRUCLINK,NDW,STATUS = struct.unpack('>IIIIIIIII',udata[DSS*4:(DSS+9)*4])
-        DSS += 9
-
-        if(self.verbose):
-            HBID_str = struct.pack('I',HBID).decode("utf-8")
-            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}",file=self.vstream)
-
-        if(self.verbose=='max'):
-            self._print_record(NDW, udata[DSS*4:])
-
-        if(HBID == 0x45545445): # ETTE - 10m event
-            return self._decode_ette(NDW, udata[DSS*4:])
-        elif(HBID == 0x52555552): # RUUR - Run header
-            return self._decode_ruur(NDW, udata[DSS*4:])
-        elif(HBID == 0x48565648): # HVVH - High voltage settings
-            return self._decode_hvvh(NDW, udata[DSS*4:])
-        elif(HBID == 0x46545446): # FTTF - 10m frame
-            return self._decode_fttf(NDW, udata[DSS*4:])
-        elif(HBID == 0x54525254): # TRRT - Tracking information
-            return self._decode_trrt(NDW, udata[DSS*4:])
-        elif(HBID == 0x43434343): # CCCC - CCD information
-            return self._decode_cccc(NDW, udata[DSS*4:])
-
-        return dict(record_type     = 'unknown',
-                    bank_id         = struct.pack('I',HBID).decode("utf-8"))
 
     def _print_record(self, NDW, data):
         for i in range(min(NDW,1000)):
