@@ -30,6 +30,7 @@
 Read Whipple 10m data in GDF/ZEBRA format into Python.
 """
 
+import os
 import struct
 import time
 import sys
@@ -52,7 +53,9 @@ def get_camera_geometry_by_nadc(nadc):
     """
     global _camera_cache
     if _camera_cache is None:
-        with open('whipple_cams.json', 'r') as f:
+        module_dir = os.path.dirname(__file__)
+        json_path = os.path.join(module_dir, 'whipple_cams.json')
+        with open(json_path, 'r') as f:
             _camera_cache = json.load(f)
     return _camera_cache.get(str((nadc+11)//12*12))
 
