@@ -68,7 +68,7 @@ The Python notebook `Draw events.pynb` gives an example of how to use the reader
 The following types of data records are supported by the reader and decoded into a Python dictionary: `Run Header`, `10m event`, `HV measurement`, `Tracking status`, and `10m frame`. In addition, `CCD data` records are recognized by the reader but no data is decoded, and a minimal dictionary is returned as described below. All other records result in the return of a dictionary with the following elements:
 
 - `'record_type'`: `'unknown'`
-- `'bank_id'`: Four character string describing the data bank from the ZEBRA file. This corresponds to the bank name given in [GDF FORTRAN code](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L1048), for example `'CCCC'` would correspond to the CCD bank.
+- `'bank_id'`: Four character string describing the data bank from the ZEBRA file. This corresponds to the bank name given in [GDF FORTRAN code](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L1048), for example `'MEEM'` would correspond to the Monte-Carlo event bank.
 
 For each of the six recognized record types, the reader will return a dictionary containing at least the following items:
 
