@@ -262,7 +262,7 @@ class FZReader:
         """
         if(self.verbose):
             print('-'*80,file=self.vstream)
-            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)}',file=self.vstream)
+            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)} bytes or {len(self.saved_pdata)/4} words',file=self.vstream)
 
         NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
 
@@ -375,10 +375,14 @@ class FZReader:
         
         pdata = pdata[16:]
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
+        FLAGS = NWPHR >> 24
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
-            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}",file=self.vstream)
+            print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}, FLAGS=0x{FLAGS:02x}",file=self.vstream)
 
+        if(NWPHR < 90):
+                raise RuntimeError(f'ZEBRA physical record length error: NWPHR={NWPHR}')
+        
         pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
             raise EOFError('ZEBRA physical packet data could not be read')
