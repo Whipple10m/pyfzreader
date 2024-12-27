@@ -16,6 +16,8 @@
 
 */
 
+// Compile: g++ -o whipple_cams_to_json whipple_cams_to_json.cpp
+
 #include <iostream>
 #include <fstream>
 #include <vector>
