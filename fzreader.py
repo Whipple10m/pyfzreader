@@ -41,15 +41,45 @@ import json
 
 _camera_cache = None
 
-def get_camera_geometry_by_nadc(nadc):
+def is_pedestal_event(record):
     """
-    Get the camera configuration corresponding to the given nadc value.
+    Check if the given record is a pedestal event.
 
     Args:
-        nadc (int): The number of ADC channels.
+        record (dict): The record to check.
 
     Returns:
-        dict: The camera configuration corresponding to the given nadc value.
+        bool: True if the record is a pedestal event, False otherwise.
+    """
+    return record['record_type'] in ('event','frame') and record['record_was_decoded'] \
+        and record['event_type'] == 'pedestal'
+
+def is_sky_event(record):
+    """
+    Check if the given record is a sky event.
+
+    Args:
+        record (dict): The record to check.
+
+    Returns:
+        bool: True if the record is a sky event, False otherwise.
+    """
+    return record['record_type']=='event' and record['event_type'] == 'sky'
+
+def get_camera_geometry_by_nadc(n):
+    """
+    Get the camera configuration corresponding to the given number of ADC channels
+    or pixels.
+
+    Args:
+        n (int): The number of ADC channels, or pixels. This is rounded up to the
+            nearest multiple of 12 before looking up the camera configuration.
+            This means that, e.g. n=331 will return the same camera configuration 
+            as n=336. Must round up to 120, 156, 336, 492, or 384, see 
+            `whipple_cams.json` for details.
+
+    Returns:
+        dict: The camera configuration corresponding to the given value of n.
     """
     global _camera_cache
     if _camera_cache is None:
@@ -321,6 +351,7 @@ class FZReader:
             return iocb&0xFFFF - 12;
 
     def _read_pdata(self):
+        # Read ZEBRA physical record
         ZEBRA_MAGIC = (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)
         pdata = b''
         nadjust = 0
@@ -355,6 +386,9 @@ class FZReader:
         return NWTOLR, pdata
 
     def _read_ldata(self):
+        # Read ZEBRA logical record, skipping padding records. Physical frames
+        # are read as necessary to get a complete logical record. Unused physical
+        # frames data saved for the next logical record.
         ldata = b''
         NWLR = 0
         LRTYP = 0
@@ -412,6 +446,8 @@ class FZReader:
         return NWLR,LRTYP,ldata
     
     def _read_udata(self):
+        # Read ZEBRA user data, combining logical (extension) records as 
+        # necessary and processing start-of-run and end-of-run records.
         LRTYP = 0
         while(LRTYP!=2 and LRTYP!=3):
             NWLR,LRTYP,ldata = self._read_ldata()
