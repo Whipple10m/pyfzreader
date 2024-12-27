@@ -436,6 +436,8 @@ class FZReader:
         while(NWLR*4>len(ldata)):
             NWTOLR, pdata = self._read_pdata()
             if(not pdata):
+                if(self.verbose):
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata) bytes = {len(ldata)/4} words}",file=self.vstream)
                 raise EOFError('ZEBRA file EOF with incomplete logical packet')
 
             if(NWTOLR == 0):
@@ -445,6 +447,8 @@ class FZReader:
                 ldata += pdata[0:(NWTOLR-8)*4]
                 self.saved_pdata = pdata[(NWTOLR-8)*4:]
             else:
+                if(self.verbose):
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata) bytes = {len(ldata)/4} words}",file=self.vstream)
                 raise RuntimeError('ZEBRA new logical packet while processing incomplete logical packet')
 
         return NWLR,LRTYP,ldata
