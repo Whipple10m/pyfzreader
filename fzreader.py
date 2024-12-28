@@ -89,6 +89,10 @@ def get_camera_geometry_by_nadc(n):
             _camera_cache = json.load(f)
     return _camera_cache.get(str((nadc+11)//12*12))
 
+class FZDecodeError(Exception):
+    """Exception raised when an error occurs while decoding a ZEBRA/GDF record."""
+    pass
+
 class EmergencyStop(Exception):
     """Exception raised when an emergency stop flag is encountered in the 
     ZEBRA physical record. Used internally by the FZReader class."""
@@ -182,6 +186,7 @@ class FZReader:
         self.resynchronise_header = resynchronise_header
         self.ppacket_headers_found = 0
         self.nbytes_read = 0
+        self.ph_start_byte = 0
         pass
 
     def __enter__(self):
@@ -204,6 +209,7 @@ class FZReader:
         self.vstream = open(self.verbose_file, 'w') if self.verbose_file else sys.stdout
         self.ppacket_headers_found = 0
         self.nbytes_read = 0
+        self.ph_start_byte = 0
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -220,6 +226,7 @@ class FZReader:
         if self.vstream is not sys.stdout:
             self.vstream.close()
         self.vstream = sys.stdout
+        self.file = None
 
     def __iter__(self):
         """
@@ -263,12 +270,16 @@ class FZReader:
                 record, or the end-of-file record is not found before the
                 end of the data.
 
-            RuntimeError: If the ZEBRA physical record MAGIC is not found,
+            FZDecodeError: If the ZEBRA physical record MAGIC is not found,
                 or some other error occurs while decoding the ZEBRA physical
                 or logical record. In this case the `resynchronise_header`
                 option may allow the reader to continue reading the file,
                 but the data may be corrupted.
         """
+
+        if(not self.file):
+            raise RuntimeError('File not open. Must call __enter__ first, or use context manager.')
+
         if(self.verbose):
             print('-'*80,file=self.vstream)
             print(f'Read called: len(saved_pdata)={len(self.saved_pdata)} bytes or {len(self.saved_pdata)/4} words',file=self.vstream)
@@ -279,7 +290,7 @@ class FZReader:
                 break
             except EmergencyStop:
                 if(self.verbose):
-                    print(f"PH: Emergency stop flag encountered, physical packet discarded",file=self.vstream)
+                    print(f"PH: Emergency stop flag encountered, physical packet discarded.",file=self.vstream)
 
         if(not udata):
             return None
@@ -366,33 +377,33 @@ class FZReader:
             return iocb&0xFFFF - 12;
 
     def _read_pdata(self):
-        start_byte = self.nbytes_read
+        self.ph_start_byte = self.nbytes_read
         
-        self.ppacket_headers_found = 0
-        self.nbytes_read = 0
-
-
         # Read ZEBRA physical record
         ZEBRA_MAGIC = (0x0123CDEF,0x80708070,0x4321ABCD,0x80618061)
         pdata = b''
         nadjust = 0
         while(len(pdata) != 32):
-            data = self.file.read(32-len(pdata))
+            try:
+                data = self.file.read(32-len(pdata))
+            except Exception as e:
+                raise EOFError(f'Read error. PH start byte: {self.ph_start_byte}.') from e
             self.nbytes_read += len(data)
             pdata += data
             if(len(pdata) == 0):
                 return None, None # EOF
             if(len(pdata) != 32):
-                raise EOFError('ZEBRA physical record MAGIC and header could not be read')
+                raise EOFError(f'ZEBRA physical record MAGIC and header could not be read. PH start byte: {self.ph_start_byte}.')
             if(struct.unpack('>IIII',pdata[:16]) == ZEBRA_MAGIC):
+                self.ppacket_headers_found += 1
                 break
             if(self.resynchronise_header):
                 pdata = pdata[1:]
-                start_byte += 1
+                self.ph_start_byte += 1
                 nadjust += 1
             else:
                 failed_magic = [f'{x:08x}' for x in struct.unpack('>IIII',pdata[:16])]
-                raise RuntimeError(f'ZEBRA physical record MAGIC not found. Values were {failed_magic}. Start byte {start_byte}.')
+                raise FZDecodeError(f'ZEBRA physical record MAGIC not found. Values were {failed_magic}. PH start byte: {self.ph_start_byte}.')
 
         if(self.verbose and nadjust>0):
             print(f"PH: *WARNING* Adjusted header by {nadjust} bytes",file=self.vstream)
@@ -403,23 +414,26 @@ class FZReader:
         NWPHR = NWPHR & 0xFFFFFF
 
         if(self.verbose):
-            print(f"PH: Found npacket={self.ppacket_headers_found} at byte {start_byte}, word {start_byte/4}",file=self.vstream)
+            print(f"PH: Found npacket={self.ppacket_headers_found} at byte {self.ph_start_byte}, word {self.ph_start_byte/4}",file=self.vstream)
             print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}, FLAGS=0x{FLAGS:02x}",file=self.vstream)
 
         self.ppacket_headers_found += 1
 
         if(NWPHR < 90):
-            raise RuntimeError(f'ZEBRA physical record length error: NWPHR={NWPHR}')
-        
-        pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
+            raise FZDecodeError(f'ZEBRA physical record length error: NWPHR={NWPHR}. PH start byte: {self.ph_start_byte}.')
+
+        try:    
+            pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
+        except Exception as e:
+            raise EOFError(f'Read error. PH start byte: {self.ph_start_byte}.') from e
         self.nbytes_read += len(pdata)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
-            raise EOFError('ZEBRA physical packet data could not be read')
+            raise EOFError(f'ZEBRA physical packet data could not be read. PH start byte: {self.ph_start_byte}.')
 
         if(FLAGS & 0x80):
             self.saved_pdata = b''
             # Emergency stop flag, discard packet after reading
-            raise EmergencyStop('ZEBRA physical record has emergency-stop flag set')
+            raise EmergencyStop(f'ZEBRA physical record has emergency-stop flag set. PH start byte: {self.ph_start_byte}.')
 
         return NWTOLR, pdata
 
@@ -439,12 +453,12 @@ class FZReader:
                 if(not pdata):
                     return None,None,None
                 if(NWTOLR != 8):
-                    raise RuntimeError('ZEBRA physical packet has unexpected data before logical record')
+                    raise FZDecodeError(f'ZEBRA physical packet has unexpected data before logical record. PH start byte: {self.ph_start_byte}.')
         
             if(len(pdata) == 4):
                 NWLR = struct.unpack('>I',pdata[0:4])[0]
                 if(NWLR != 0):
-                    raise RuntimeError('ZEBRA logical record size error:',NWLR)
+                    raise FZDecodeError(f'ZEBRA logical record size error: {NWLR}. PH start byte: {self.ph_start_byte}.')
                 pdata = b''
                 continue
 
@@ -472,7 +486,7 @@ class FZReader:
             if(not pdata):
                 if(self.verbose):
                     print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata)} bytes = {len(ldata)/4} words",file=self.vstream)
-                raise EOFError('ZEBRA file EOF with incomplete logical packet')
+                raise EOFError(f'ZEBRA file EOF with incomplete logical packet. PH start byte: {self.ph_start_byte}.')
 
             if(NWTOLR == 0):
                 ldata += pdata
@@ -483,7 +497,7 @@ class FZReader:
             else:
                 if(self.verbose):
                     print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata)} bytes = {len(ldata)/4} words",file=self.vstream)
-                raise RuntimeError('ZEBRA new logical packet while processing incomplete logical packet')
+                raise FZDecodeError(f'ZEBRA new logical packet while processing incomplete logical packet. PH start byte: {self.ph_start_byte}.')
 
         return NWLR,LRTYP,ldata
     
@@ -495,7 +509,7 @@ class FZReader:
             NWLR,LRTYP,ldata = self._read_ldata()
             if(not ldata):
                 if(not self.end_of_run):
-                    raise EOFError('ZEBRA file end-of-file not found before end of data')
+                    raise EOFError(f'ZEBRA file end-of-file not found before end of data. PH start byte: {self.ph_start_byte}.')
                 return None, None, None, None, None, None, None
             if(LRTYP == 1):
                 # Start-of-run or end-of-run, flag end-of-run
@@ -506,15 +520,15 @@ class FZReader:
                     if(NRUN<=0):
                         self.end_of_run = True
             elif(LRTYP==4):
-                raise RuntimeError('ZEBRA logical extension found where start expected')
+                raise FZDecodeError(f'ZEBRA logical extension found where start expected. PH start byte: {self.ph_start_byte}.')
             elif(self.verbose and LRTYP!=2 and LRTYP!=3):
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(len(ldata)<40):
-            raise RuntimeError('ZEBRA logical record too short for header')
+            raise FZDecodeError(f'ZEBRA logical record too short for header. PH start byte: {self.ph_start_byte}.')
         magic,_,_,_,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = struct.unpack('>IIIIIIIIII',ldata[0:40])
         if(magic!=0x4640e400):
-            raise RuntimeError('ZEBRA logical record MAGIC not found')
+            raise FZDecodeError(f'ZEBRA logical record MAGIC not found. PH start byte: {self.ph_start_byte}.')
         NWBKST = NWLR - (10 + NWUHIO + NWSEG + NWTX + NWTAB)
 
         if(self.verbose):
@@ -523,9 +537,9 @@ class FZReader:
         while(NWBKST<NWBK):
             NWLR,LRTYP,xldata = self._read_ldata()
             if(not ldata):
-                raise RuntimeError('ZEBRA end of file while searching for logical extension')
+                raise FZDecodeError(f'ZEBRA end of file while searching for logical extension. PH start byte: {self.ph_start_byte}.')
             if(LRTYP==2 or LRTYP==3):
-                raise RuntimeError('ZEBRA logical start found where extension expected')
+                raise FZDecodeError(f'ZEBRA logical start found where extension expected. PH start byte: {self.ph_start_byte}.')
             if(LRTYP==4):
                 ldata += xldata
                 NWBKST += NWLR
@@ -535,11 +549,11 @@ class FZReader:
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(NWBKST != NWBK):
-            raise RuntimeError('ZEBRA number of bank words found does not match expected')
+            raise FZDecodeError(f'ZEBRA number of bank words found does not match expected. PH start byte: {self.ph_start_byte}.')
 
         if(NWUHIO!=0):
             if(len(ldata)<44):
-                raise RuntimeError('ZEBRA logical record does not have user header IO control words')
+                raise FZDecodeError(f'ZEBRA logical record does not have user header IO control words. PH start byte: {self.ph_start_byte}.')
             UHIOCW, = struct.unpack('>I',ldata[40:44])
             NWIO = self._nio(UHIOCW)
         else:
@@ -564,28 +578,28 @@ class FZReader:
         return
 
     def _skip_block(self, NFIRST, NDW, data, nitems, datum_len):
-        if(NFIRST+1 >= NDW):
-            raise RuntimeError(f'GDF bank data does not have block header: {NFIRST}+1 >= {NDW}')
+        if(NFIRST+1 > NDW):
+            raise FZDecodeError(f'GDF bank data does not have block header: {NFIRST}+1 > {NDW}. PH start byte: {self.ph_start_byte}.')
         block_header, = struct.unpack('>I',data[NFIRST*4:(NFIRST+1)*4])
         NFIRST += 1
         NW = block_header>>4
         if(NW != (nitems*datum_len + 3)//4):
-            raise RuntimeError(f'GDF bank data block size not as expected: {NW} != {nitems*datum_len//4}')
+            raise FZDecodeError(f'GDF bank data block size not as expected: {NW} != {nitems*datum_len//4}. PH start byte: {self.ph_start_byte}.')
         if(NFIRST+NW > NDW):
-            raise RuntimeError(f'GDF bank data does not have full block: {NFIRST}+{NW} > {NDW}')
+            raise FZDecodeError(f'GDF bank data does not have full block: {NFIRST}+{NW} > {NDW}. PH start byte: {self.ph_start_byte}.')
         NFIRST += NW
         return NFIRST
 
     def _unpack_block(self, NFIRST, NDW, data, nitems, datum_code, datum_len):
         if(NFIRST+1 > NDW):
-            raise RuntimeError(f'GDF bank data does not have block header: {NFIRST}+1 > {NDW}')
+            raise FZDecodeError(f'GDF bank data does not have block header: {NFIRST}+1 > {NDW}. PH start byte: {self.ph_start_byte}.')
         block_header, = struct.unpack('>I',data[NFIRST*4:(NFIRST+1)*4])
         NFIRST += 1
         NW = block_header>>4
         if(NW != (nitems*datum_len + 3)//4):
-            raise RuntimeError(f'GDF bank data block size not as expected: {NW} != {nitems*datum_len//4}')
+            raise FZDecodeError(f'GDF bank data block size not as expected: {NW} != {nitems*datum_len//4}. PH start byte: {self.ph_start_byte}.')
         if(NFIRST+NW > NDW):
-            raise RuntimeError(f'GDF bank data does not have full block: {NFIRST}+{NW} > {NDW}')
+            raise FZDecodeError(f'GDF bank data does not have full block: {NFIRST}+{NW} > {NDW}. PH start byte: {self.ph_start_byte}.')
         FMT = f'>{NW*4//datum_len}{datum_code}'
         block_values = struct.unpack(FMT,data[NFIRST*4:(NFIRST+NW)*4])
         NFIRST += NW
