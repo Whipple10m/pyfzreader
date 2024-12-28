@@ -273,6 +273,20 @@ class FZReader:
         """
         return self.ph_start_byte
 
+    def _decode_sequence(self, NHW, seq_name, DSS, NDW, data):
+        ndecode = min(NHW, NDW-DSS)
+        values = struct.unpack(f'>{ndecode}I',data[DSS*4:(DSS+ndecode)*4])
+        if(self.verbose and NHW>0):
+            hstr = f'{seq_name}:'
+            for i in range(ndecode):
+                hstr += f' {values[i]}'
+            for i in range(ndecode, NHW):
+                hstr += f' (missing)'
+            print(hstr,file=self.vstream)
+        if(ndecode != NHW):
+            raise FZDecodeError(f'GDF user data not have full {seq_name} sequence: {DSS}+{NHW} > {NDW}. PH start byte: {self.ph_start_byte}.')
+        return DSS+NHW, values
+
     def read(self):
         """
         Read the next record from the file.
@@ -300,7 +314,7 @@ class FZReader:
 
         if(self.verbose):
             print('-'*80,file=self.vstream)
-            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)} bytes or {len(self.saved_pdata)/4} words',file=self.vstream)
+            print(f'Read called: len(saved_pdata)={len(self.saved_pdata)//4} words',file=self.vstream)
 
         while(True):
             try:
@@ -314,60 +328,31 @@ class FZReader:
             return None
 
         DSS = 0
+        NDW = len(udata)//4
+        if(len(udata) != NDW*4):
+            raise FZDecodeError(f'ZEBRA user data is not multiple of wordsize: {len(udata)} != {NUW*4}. PH start byte: {self.ph_start_byte}.')
 
-        if(NWUH>0):
-            if(self.verbose):
-                print(f"UH:",end="",file=self.vstream)
-                for i in range(NWUH):
-                    x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                    if(i):
-                        print(",",end="",file=self.vstream)
-                    print(f" UH({i})={x}",end="",file=self.vstream)
-                print(file=self.vstream)
-            if(NWUH==2):
-                runno, eventno = struct.unpack('>II',udata[DSS:DSS+8])
-        DSS += NWUH
+        DSS, user_header = self._decode_sequence(NWUH, 'UH', DSS, NDW, udata)
+        recordno, runno = user_header
 
-        if(self.verbose and NWSEG>0):
-            print(f"ST:",end="",file=self.vstream)
-            for i in range(NWSEG):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" ST({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWSEG
+        DSS, _ = self._decode_sequence(NWSEG, 'ST', DSS, NDW, udata)
 
-        if(self.verbose and NWTX>0):
-            print(f"TV:",end="",file=self.vstream)
-            for i in range(NWTX):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" TV({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWTX
+        DSS, _ = self._decode_sequence(NWTX, 'TV', DSS, NDW, udata)   
 
-        if(self.verbose and NWTAB>0):
-            print(f"RT:",end="",file=self.vstream)
-            for i in range(NWTAB):
-                x, = struct.unpack('>I',udata[(DSS+i)*4:(DSS+i+1)*4])
-                if(i):
-                    print(",",end="",file=self.vstream)
-                print(f" RT({i})={x}",end="",file=self.vstream)
-            print(file=self.vstream)
-        DSS += NWTAB
+        DSS, _ = self._decode_sequence(NWTAB, 'RT', DSS, NDW, udata)
 
-        IOCB, = struct.unpack('>I',udata[DSS*4:(DSS+1)*4])
+        DSS, iocb_values = self._decode_sequence(1, 'IOCBH', DSS, NDW, udata)
+        IOCB = iocb_values[0]
         NIO = self._nio(IOCB)
-        DSS += 1+NIO
 
-        NXTPTR,UPPTR,ORIGPTR,NBID,HBID,NLINK,NSTRUCLINK,NDW,STATUS = struct.unpack('>IIIIIIIII',udata[DSS*4:(DSS+9)*4])
-        DSS += 9
+        DSS, _ = self._decode_sequence(NIO, 'IOCBD', DSS, NDW, udata)
+
+        DSS, bank_header = self._decode_sequence(9, 'BH (raw)', DSS, NDW, udata)
+        NXTPTR,UPPTR,ORIGPTR,NBID,HBID,NLINK,NSTRUCLINK,NDW,STATUS = bank_header
 
         if(self.verbose):
             HBID_str = struct.pack('I',HBID).decode("utf-8")
-            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len={len(udata)}",file=self.vstream)
+            print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len(udata)={len(udata)//4} words",file=self.vstream)
 
         if(self.verbose=='max'):
             self._print_record(NDW, udata[DSS*4:])
@@ -426,8 +411,8 @@ class FZReader:
         if(self.verbose and nadjust>0):
             print(f"PH: *WARNING* Adjusted header by {nadjust} bytes",file=self.vstream)
         
-        pdata = pdata[16:]
-        NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
+        _, pheader = self._decode_sequence(4, 'PH (raw)', 4, 8, pdata)
+        NWPHR, PRC, NWTOLR, NFAST = pheader
         FLAGS = NWPHR >> 24
         NWPHR = NWPHR & 0xFFFFFF
 
@@ -500,10 +485,13 @@ class FZReader:
                 ldata = pdata[8:]
 
         while(NWLR*4>len(ldata)):
+            if(self.saved_pdata):
+                raise FZDecodeError(f'Logic error: already has saved pdata but about to load more. PH start byte: {self.ph_start_byte}.')
+        
             NWTOLR, pdata = self._read_pdata()
             if(not pdata):
                 if(self.verbose):
-                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata)} bytes = {len(ldata)/4} words",file=self.vstream)
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len(ldata)={len(ldata)//4} words",file=self.vstream)
                 raise EOFError(f'ZEBRA file EOF with incomplete logical packet. PH start byte: {self.ph_start_byte}.')
 
             if(NWTOLR == 0):
@@ -514,7 +502,7 @@ class FZReader:
                 self.saved_pdata = pdata[(NWTOLR-8)*4:]
             else:
                 if(self.verbose):
-                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata)} bytes = {len(ldata)/4} words",file=self.vstream)
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len={len(ldata)//4} words",file=self.vstream)
                 raise FZDecodeError(f'ZEBRA new logical packet while processing incomplete logical packet. PH start byte: {self.ph_start_byte}.')
 
         return NWLR,LRTYP,ldata
@@ -530,7 +518,7 @@ class FZReader:
                     raise EOFError(f'ZEBRA file end-of-file not found before end of data. PH start byte: {self.ph_start_byte}.')
                 return None, None, None, None, None, None, None
             if(LRTYP == 1):
-                # Start-of-run or end-of-run, flag end-of-run
+                # Start-of-run or end-of-run: flag the end-of-run for later use
                 if(NWLR>0):
                     NRUN = struct.unpack('>i',ldata[0:4])[0]
                     if(self.verbose):
@@ -542,19 +530,22 @@ class FZReader:
             elif(self.verbose and LRTYP!=2 and LRTYP!=3):
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
-        if(len(ldata)<40):
-            raise FZDecodeError(f'ZEBRA logical record too short for header. PH start byte: {self.ph_start_byte}.')
-        magic,_,_,_,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = struct.unpack('>IIIIIIIIII',ldata[0:40])
+        DSS = 0
+        try:
+            DSS, lheader = self._decode_sequence(10, 'LH (raw)', DSS, NWLR, ldata)
+        except Exception as e:
+            raise FZDecodeError(f'ZEBRA logical record too short for header: len(ldata)={len(ldata)//4} words. PH start byte: {self.ph_start_byte}.') from e
+        magic,_,_,_,NWTX,NWSEG,NWTAB,NWBK,LENTRY,NWUHIO = lheader
         if(magic!=0x4640e400):
             raise FZDecodeError(f'ZEBRA logical record MAGIC not found. PH start byte: {self.ph_start_byte}.')
         NWBKST = NWLR - (10 + NWUHIO + NWSEG + NWTX + NWTAB)
 
         if(self.verbose):
-            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO},  NWBKST={NWBKST}, len={len(ldata)}",file=self.vstream)
+            print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWTX={NWTX}, NWSEG={NWSEG}, NWTAB={NWTAB}, NWBK={NWBK}, LENTRY={LENTRY}, NWUHIO={NWUHIO},  NWBKST={NWBKST}, len(ldata)={len(ldata)//4} words",file=self.vstream)
 
         while(NWBKST<NWBK):
             NWLR,LRTYP,xldata = self._read_ldata()
-            if(not ldata):
+            if(not xldata):
                 raise FZDecodeError(f'ZEBRA end of file while searching for logical extension. PH start byte: {self.ph_start_byte}.')
             if(LRTYP==2 or LRTYP==3):
                 raise FZDecodeError(f'ZEBRA logical start found where extension expected. PH start byte: {self.ph_start_byte}.')
@@ -562,17 +553,16 @@ class FZReader:
                 ldata += xldata
                 NWBKST += NWLR
                 if(self.verbose):
-                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}",file=self.vstream)
+                    print(f"LH: NWLR={NWLR}, LRTYP={LRTYP}, NWBKST={NWBKST}",file=self.vstream)
             elif(self.verbose):
                 print(f"LH: NWLR={NWLR}, LRTYP={LRTYP} (skipping)",file=self.vstream)
 
         if(NWBKST != NWBK):
-            raise FZDecodeError(f'ZEBRA number of bank words found does not match expected. PH start byte: {self.ph_start_byte}.')
+            raise FZDecodeError(f'ZEBRA number of bank words found does not match expected: {NWBKST} != {NWBK}. PH start byte: {self.ph_start_byte}.')
 
-        if(NWUHIO!=0):
-            if(len(ldata)<44):
-                raise FZDecodeError(f'ZEBRA logical record does not have user header IO control words. PH start byte: {self.ph_start_byte}.')
-            UHIOCW, = struct.unpack('>I',ldata[40:44])
+        if(NWUHIO != 0):
+            DSS, uhiocw_values = self._decode_sequence(1, 'UHIOCW', DSS, len(ldata)//4, ldata)
+            UHIOCW = uhiocw_values[0]
             NWIO = self._nio(UHIOCW)
         else:
             UHIOCW=0
@@ -580,7 +570,7 @@ class FZReader:
         NWUH = NWUHIO-NWIO
         NWBKST = NWLR - (10 + NWIO + NWUH + NWSEG + NWTX + NWTAB)
 
-        return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[(10+NWIO)*4:]
+        return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[DSS*4:]
 
     def _print_record(self, NDW, data):
         nprint = min(NDW,1000)
