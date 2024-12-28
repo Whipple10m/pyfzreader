@@ -344,6 +344,8 @@ class FZReader:
         DSS, iocb_values = self._decode_sequence(1, 'IOCBH', DSS, NDW, udata)
         IOCB = iocb_values[0]
         NIO = self._nio(IOCB)
+        if(self.verbose):
+            print(f"IOCBH: IOCB={IOCB}, NIO={NIO}",file=self.vstream)
 
         DSS, _ = self._decode_sequence(NIO, 'IOCBD', DSS, NDW, udata)
 
@@ -564,6 +566,8 @@ class FZReader:
             DSS, uhiocw_values = self._decode_sequence(1, 'UHIOCW', DSS, len(ldata)//4, ldata)
             UHIOCW = uhiocw_values[0]
             NWIO = self._nio(UHIOCW)
+            if(self.verbose):
+                print(f"UHIOCW: UHIOCW={UHIOCW}, NWIO={NWIO}",file=self.vstream)
         else:
             UHIOCW=0
             NWIO=0
