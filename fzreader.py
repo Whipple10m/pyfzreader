@@ -929,7 +929,7 @@ class FZReader:
         NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data, 3)
         mode, read_cycle = block_values[1:3]
 
-        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data, 1)
+        NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data, 2 if 42<=record['gdf_version']<=64 else 1)
         status = block_values[0]
 
         NFIRST, block_values = self._unpack_block_F64(NFIRST, NDW, data, 15)
