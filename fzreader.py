@@ -488,6 +488,8 @@ class FZReader:
 
         while(NWLR*4>len(ldata)):
             if(self.saved_pdata):
+                if(self.verbose):
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}, len(ldata)={len(ldata)//4} words, len(self.saved_pdata)={len(self.saved_pdata)//4} words}",file=self.vstream)
                 raise FZDecodeError(f'Logic error: already has saved pdata but about to load more. PH start byte: {self.ph_start_byte}.')
         
             NWTOLR, pdata = self._read_pdata()
