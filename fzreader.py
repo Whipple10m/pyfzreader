@@ -276,7 +276,6 @@ class FZReader:
             except EmergencyStop:
                 if(self.verbose):
                     print(f"PH: Emergency stop flag encountered, physical packet discarded",file=self.vstream)
-                self.saved_pdata = b''
 
         if(not udata):
             return None
@@ -388,19 +387,22 @@ class FZReader:
         pdata = pdata[16:]
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         FLAGS = NWPHR >> 24
-        if(FLAGS & 0x80):
-            raise EmergencyStop('ZEBRA physical record has emergency-stop flag set')
-
         NWPHR = NWPHR & 0xFFFFFF
+
         if(self.verbose):
             print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}, FLAGS=0x{FLAGS:02x}",file=self.vstream)
 
         if(NWPHR < 90):
-                raise RuntimeError(f'ZEBRA physical record length error: NWPHR={NWPHR}')
+            raise RuntimeError(f'ZEBRA physical record length error: NWPHR={NWPHR}')
         
         pdata = self.file.read((NWPHR*(1+NFAST)-8)*4)
         if(len(pdata) != (NWPHR*(1+NFAST)-8)*4):
             raise EOFError('ZEBRA physical packet data could not be read')
+
+        if(FLAGS & 0x80):
+            self.saved_pdata = b''
+            # Emergency stop flag, discard packet after reading
+            raise EmergencyStop('ZEBRA physical record has emergency-stop flag set')
 
         return NWTOLR, pdata
 
