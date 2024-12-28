@@ -357,7 +357,7 @@ class FZReader:
             print(f"BH: IOCB={IOCB}, NXTPTR={NXTPTR}, UPPTR={UPPTR}, ORIGPTR={ORIGPTR}, NBID={NBID}, HBID={HBID} ({HBID_str}), NLINK={NLINK}, NSTRUCLINK={NSTRUCLINK}, NDW={NDW}, STATUS={STATUS}, len(udata)={len(udata)//4} words",file=self.vstream)
 
         if(self.verbose=='max'):
-            self._print_record(NDW, udata[DSS*4:])
+            self._print_record(udata[DSS*4:])
 
         if(HBID == 0x45545445): # ETTE - 10m event
             return self._decode_ette(NDW, udata[DSS*4:])
@@ -576,17 +576,19 @@ class FZReader:
 
         return NWTX, NWSEG, NWTAB, NWBK, LENTRY, NWUH, ldata[DSS*4:]
 
-    def _print_record(self, NDW, data):
-        nprint = min(NDW,1000)
+    def _print_record(self, data):
+        nprint = min(len(data)//4, 1000)
+        values = struct.unpack(f'>{nprint}I',data[:nprint*4])
         for i in range(nprint):
-            x,  = struct.unpack('>I',data[i*4:(i+1)*4])
             if(i%8==0):
                 print(f'{i*4:4d} |',end='',file=self.vstream)
-            print(f"  {x:10d}",end='',file=self.vstream)
+            print(f"  {values[i]:10d}",end='',file=self.vstream)
             if(i%8==7):
                 print(file=self.vstream)
         if(nprint and nprint%8!=0):
             print(file=self.vstream)
+        if(len(data)//4 > nprint):
+            print(f"  {nprint:10d} | ... continued ...",end='',file=self.vstream)
         return
 
     def _skip_block(self, NFIRST, NDW, data, nitems, datum_len):
@@ -714,7 +716,6 @@ class FZReader:
         if(record['gdf_version'] >= 74):
             NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data, 20)
             nadc, run_num, event_num, livetime_sec, livetime_ns = block_values[0:5]
-            nphs, nbrst = block_values[8:10]
             ntrigger, elaptime_sec, elaptime_ns = block_values[13:16]
             grs_data_10MHz, grs_data_time, grs_data_day = block_values[16:19]
 
