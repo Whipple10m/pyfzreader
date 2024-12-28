@@ -184,7 +184,7 @@ class FZReader:
         self.vstream = sys.stdout
         self.end_of_run = False
         self.resynchronise_header = resynchronise_header
-        self.ppacket_headers_found = 0
+        self.packet_headers_found = 0
         self.nbytes_read = 0
         self.ph_start_byte = 0
         pass
@@ -207,7 +207,7 @@ class FZReader:
             self.file = open(self.filename, 'rb')
         self.saved_pdata = b''
         self.vstream = open(self.verbose_file, 'w') if self.verbose_file else sys.stdout
-        self.ppacket_headers_found = 0
+        self.packet_headers_found = 0
         self.nbytes_read = 0
         self.ph_start_byte = 0
         return self
@@ -254,6 +254,24 @@ class FZReader:
         if not record:
             raise StopIteration
         return record
+
+    def num_bytes_read(self):
+        """
+        Get the number of bytes read from the file.
+        """
+        return self.nbytes_read
+
+    def num_packets_found(self):
+        """
+        Get the number of packet headers found in the file.
+        """
+        return self.packet_headers_found
+    
+    def last_packet_header_start_byte(self):
+        """
+        Get the start byte of the last packet header found in the file.
+        """
+        return self.ph_start_byte
 
     def read(self):
         """
@@ -395,7 +413,7 @@ class FZReader:
             if(len(pdata) != 32):
                 raise EOFError(f'ZEBRA physical record MAGIC and header could not be read. PH start byte: {self.ph_start_byte}.')
             if(struct.unpack('>IIII',pdata[:16]) == ZEBRA_MAGIC):
-                self.ppacket_headers_found += 1
+                self.packet_headers_found += 1
                 break
             if(self.resynchronise_header):
                 pdata = pdata[1:]
@@ -414,10 +432,10 @@ class FZReader:
         NWPHR = NWPHR & 0xFFFFFF
 
         if(self.verbose):
-            print(f"PH: Found npacket={self.ppacket_headers_found} at byte {self.ph_start_byte}, word {self.ph_start_byte/4}",file=self.vstream)
+            print(f"PH: Found npacket={self.packet_headers_found} at byte {self.ph_start_byte}, word {self.ph_start_byte/4}",file=self.vstream)
             print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}, FLAGS=0x{FLAGS:02x}",file=self.vstream)
 
-        self.ppacket_headers_found += 1
+        self.packet_headers_found += 1
 
         if(NWPHR < 90):
             raise FZDecodeError(f'ZEBRA physical record length error: NWPHR={NWPHR}. PH start byte: {self.ph_start_byte}.')
