@@ -469,6 +469,11 @@ class FZReader:
             _, lh_data = self._decode_sequence(2, 'LH (raw type)', 0, len(pdata)//4, pdata)
             NWLR, LRTYP = lh_data
 
+            if(LRTYP > 6):
+                if(self.verbose):
+                    print(f"LH(PARTIAL): NWLR={NWLR}, LRTYP={LRTYP}",file=self.vstream)
+                raise FZDecodeError(f'ZEBRA logical record type error: LRTYP={LRTYP} > 6. PH start byte: {self.ph_start_byte}.')
+
             if(NWLR == 0):
                 # Skip implicit padding records
                 pdata = pdata[4:]
