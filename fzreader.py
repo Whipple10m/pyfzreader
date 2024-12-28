@@ -89,6 +89,11 @@ def get_camera_geometry_by_nadc(n):
             _camera_cache = json.load(f)
     return _camera_cache.get(str((nadc+11)//12*12))
 
+class EmergencyStop(Exception):
+    """Exception raised when an emergency stop flag is encountered in the 
+    ZEBRA physical record. Used internally by the FZReader class."""
+    pass
+
 class FZReader:
     """
     A class to read Whipple 10m data in GDF/ZEBRA format.
@@ -264,7 +269,14 @@ class FZReader:
             print('-'*80,file=self.vstream)
             print(f'Read called: len(saved_pdata)={len(self.saved_pdata)} bytes or {len(self.saved_pdata)/4} words',file=self.vstream)
 
-        NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
+        while(True):
+            try:
+                NWTX, NWSEG, NWTAB, _, _, NWUH, udata = self._read_udata()
+                break
+            except EmergencyStop:
+                if(self.verbose):
+                    print(f"PH: Emergency stop flag encountered, physical packet discarded",file=self.vstream)
+                self.saved_pdata = b''
 
         if(not udata):
             return None
@@ -376,6 +388,9 @@ class FZReader:
         pdata = pdata[16:]
         NWPHR, PRC, NWTOLR, NFAST = struct.unpack('>IIII',pdata)
         FLAGS = NWPHR >> 24
+        if(FLAGS & 0x80):
+            raise EmergencyStop('ZEBRA physical record has emergency-stop flag set')
+
         NWPHR = NWPHR & 0xFFFFFF
         if(self.verbose):
             print(f"PH: NWPHR={NWPHR}, PRC={PRC}, NWTOLR={NWTOLR}, NFAST={NFAST}, FLAGS=0x{FLAGS:02x}",file=self.vstream)
