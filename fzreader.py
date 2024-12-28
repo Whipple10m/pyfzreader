@@ -400,7 +400,6 @@ class FZReader:
             if(len(pdata) != 32):
                 raise EOFError(f'ZEBRA physical record MAGIC and header could not be read. PH start byte: {self.ph_start_byte}.')
             if(struct.unpack('>IIII',pdata[:16]) == ZEBRA_MAGIC):
-                self.packet_headers_found += 1
                 break
             if(self.resynchronise_header):
                 pdata = pdata[1:]
@@ -467,7 +466,9 @@ class FZReader:
                 pdata = b''
                 continue
 
-            NWLR, LRTYP = struct.unpack('>II',pdata[0:8])
+            _, lh_data = self._decode_sequence(2, 'LH (raw type)', 0, len(pdata)//4, pdata)
+            NWLR, LRTYP = lh_data
+
             if(NWLR == 0):
                 # Skip implicit padding records
                 pdata = pdata[4:]
