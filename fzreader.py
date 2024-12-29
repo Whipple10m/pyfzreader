@@ -682,39 +682,43 @@ class FZReader:
                        ((grs_time >>  4) & 0xF) * 10 + \
                        ((grs_time      ) & 0xF)
         
-        grs_day_of_year = ((grs_day >> 8) & 0xF) * 100 + \
+        grs_day_of_year = ((grs_day >> 8) & 0x3) * 100 + \
                           ((grs_day >> 4) & 0xF) * 10 + \
                           ((grs_day     ) & 0xF)
+
+        grs_status = (grs_day >> 16) & 0xF
 
         grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
 
         grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
 
-        return grs_day_of_year, grs_utc_time_sec, grs_utc_time_str
+        return grs_day_of_year, grs_utc_time_sec, grs_utc_time_str, grs_status
 
     def _decode_gps(self, gps_low, gps_mid, gps_high):
         # Decode old Whipple GPS (See GPSTIME from fz2red)
 
-        gps_day_of_year = ((gps_high >> 14) & 0xF) * 100 + \
+        gps_day_of_year = ((gps_high >> 14) & 0x3) * 100 + \
                           ((gps_high >> 10) & 0xF) * 10 + \
                           ((gps_high >>  6) & 0xF)
 
-        gps_ms = ((gps_mid  & 0x3) <<  2) * 100 + \
-                 ((gps_low  >> 14) & 0x3) * 100 + \
-                 ((gps_low  >> 10) & 0xF) * 10 + \
-                 ((gps_low  >>  6) & 0xF)
+        gps_us = ((gps_mid  & 0x3) <<  2) * 100000 + \
+                 ((gps_low  >> 14) & 0x3) * 100000 + \
+                 ((gps_low  >> 10) & 0xF) * 10000 + \
+                 ((gps_low  >>  6) & 0xF) * 1000 + \
+                 (gps_low & 0x3) * 250
 
+        gps_status = (gps_low >> 2) & 0xF
 
         gps_utc_time_sec = ((gps_high >>  4) & 0x3) * 36000 + \
                            ((gps_high      ) & 0xF) * 3600 + \
                            ((gps_mid  >> 13) & 0x7) * 600 + \
                            ((gps_mid  >>  9) & 0xF) * 60 + \
                            ((gps_mid  >>  6) & 0x7) * 10 + \
-                           ((gps_mid  >>  2) & 0xF) + gps_ms*0.001
+                           ((gps_mid  >>  2) & 0xF) + gps_us*0.000001
 
-        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_ms:03d}'
+        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_ms:05d}'
 
-        return gps_day_of_year, gps_utc_time_sec, gps_utc_time_str
+        return gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status
 
     def _decode_ette(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'event')
@@ -744,7 +748,7 @@ class FZReader:
 
             gps_truetime_grs = True
             gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_truetime(
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_truetime(
                 grs_data_10MHz, grs_data_time, grs_data_day)
 
             version_dependent_elements = dict(
@@ -773,7 +777,7 @@ class FZReader:
 
             gps_truetime_grs = False
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
 
         record.update(dict(
@@ -787,6 +791,7 @@ class FZReader:
             gps_day_of_year     = gps_day_of_year,
             gps_utc_time_sec    = gps_utc_time_sec,
             gps_utc_time_str    = gps_utc_time_str,
+            gps_status          = gps_status,
             trigger_code        = trigger_code,
             event_type          = event_type,
             nadc                = nadc,
