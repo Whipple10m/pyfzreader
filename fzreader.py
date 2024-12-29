@@ -729,7 +729,7 @@ class FZReader:
 
             NFIRST, block_values = self._unpack_block_I32(NFIRST, NDW, data, 7)
             trigger_code = block_values[0]
-            event_type = 'pedestal' if trigger_code==1 else 'sky'
+            event_type = 'pedestal' if (trigger_code & 0x01) else 'sky'
 
             trigger_data = ()
             if(ntrigger>0):
