@@ -830,7 +830,7 @@ class FZReader:
 
             gps_truetime_grs = False
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str = self._decode_gps(
+            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
             
             record.update(dict(
@@ -842,6 +842,7 @@ class FZReader:
                 gps_day_of_year     = gps_day_of_year,
                 gps_utc_time_sec    = gps_utc_time_sec,
                 gps_utc_time_str    = gps_utc_time_str,
+                gps_status          = gps_status,
                 event_type          = 'pedestal',
                 nadc                = nadc,
                 adc_values          = adc_values,
