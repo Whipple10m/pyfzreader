@@ -716,7 +716,7 @@ class FZReader:
                            ((gps_mid  >>  6) & 0x7) * 10 + \
                            ((gps_mid  >>  2) & 0xF) + gps_us*0.000001
 
-        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_ms:05d}'
+        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_us:05d}'
 
         return gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status
 
