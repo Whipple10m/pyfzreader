@@ -744,7 +744,8 @@ class FZReader:
                 NFIRST, adc_values = self._unpack_block_I16(NFIRST, NDW, data, nadc)
 
             # Prefer to explicitly skip this block to test consistancy of data
-            NFIRST = self._skip_block(NFIRST, NDW, data, 28, 2) 
+            # NFIRST = self._skip_block(NFIRST, NDW, data, 28, 2) 
+            NFIRST, block_values = self._unpack_block_I16(NFIRST, NDW, data, 28)
 
             gps_truetime_grs = True
             gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
