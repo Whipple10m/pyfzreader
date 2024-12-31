@@ -753,51 +753,59 @@ class FZReader:
         epoch_time = max(round((mjd-40587.0)*86400000)*0.001,0)
         return time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(int(epoch_time)))+f'.{int(epoch_time*1000)%1000:03d}'
 
-    def _decode_truetime(self, grs_time_10MHz, grs_time, grs_day):
-        grs_utc_isec = ((grs_time >> 20) & 0xF) * 36000 + \
+    def _decode_truetime(self, grs_10MHz_scaler, grs_time, grs_day):
+        gps_day_of_year = ((grs_day >> 8) & 0x3) * 100 + \
+                          ((grs_day >> 4) & 0xF) * 10 + \
+                          ((grs_day     ) & 0xF)
+        gps_mjd = gps_day_of_year + self.nominal_year_mjd - 1 # DOY is 1-based
+
+        gps_utc_sec = ((grs_time >> 20) & 0xF) * 36000 + \
                        ((grs_time >> 16) & 0xF) * 3600 + \
                        ((grs_time >> 12) & 0xF) * 600 + \
                        ((grs_time >>  8) & 0xF) * 60 + \
                        ((grs_time >>  4) & 0xF) * 10 + \
                        ((grs_time      ) & 0xF)
         
-        grs_day_of_year = ((grs_day >> 8) & 0x3) * 100 + \
-                          ((grs_day >> 4) & 0xF) * 10 + \
-                          ((grs_day     ) & 0xF)
+        gps_ns = grs_10MHz_scaler * 100
 
-        grs_status = (grs_day >> 16) & 0xF
+        gps_status = (grs_day >> 16) & 0xF
+        gps_is_good = True if gps_status&0x8 else False
 
-        grs_utc_time_sec = float(grs_utc_isec) + float(grs_time_10MHz)*1e-7
+        gps_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_10MHz_scaler:07d}'
 
-        grs_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_time_10MHz:07d}'
+        return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
-        return grs_day_of_year, grs_utc_time_sec, grs_utc_time_str, grs_status
-
-    def _decode_gps(self, gps_low, gps_mid, gps_high):
+    def _decode_michigan_gps(self, gps_low, gps_mid, gps_high, verbose = True):
         # Decode old Whipple GPS (See GPSTIME from fz2red)
 
         gps_day_of_year = ((gps_high >> 14) & 0x3) * 100 + \
                           ((gps_high >> 10) & 0xF) * 10 + \
                           ((gps_high >>  6) & 0xF)
+        gps_mjd = gps_day_of_year + self.nominal_year_mjd - 1 # DOY is 1-based
 
-        gps_us = ((gps_mid  & 0x3) <<  2) * 100000 + \
-                 ((gps_low  >> 14) & 0x3) * 100000 + \
-                 ((gps_low  >> 10) & 0xF) * 10000 + \
-                 ((gps_low  >>  6) & 0xF) * 1000 + \
-                 (gps_low & 0x3) * 250
+        gps_utc_sec = ((gps_high >>  4) & 0x3) * 36000 + \
+                        ((gps_high      ) & 0xF) * 3600 + \
+                        ((gps_mid  >> 13) & 0x7) * 600 + \
+                        ((gps_mid  >>  9) & 0xF) * 60 + \
+                        ((gps_mid  >>  6) & 0x7) * 10 + \
+                        ((gps_mid  >>  2) & 0xF)
+
+        gps_10us = ((gps_mid  & 0x3) <<  2) * 10000 + \
+                 ((gps_low  >> 14) & 0x3) * 10000 + \
+                 ((gps_low  >> 10) & 0xF) * 1000 + \
+                 ((gps_low  >>  6) & 0xF) * 100 + \
+                 (gps_low & 0x3) * 25
+        gps_ns = gps_10us * 10000
 
         gps_status = (gps_low >> 2) & 0xF
+        gps_is_good = True if gps_status&0x8 else False
 
-        gps_utc_time_sec = ((gps_high >>  4) & 0x3) * 36000 + \
-                           ((gps_high      ) & 0xF) * 3600 + \
-                           ((gps_mid  >> 13) & 0x7) * 600 + \
-                           ((gps_mid  >>  9) & 0xF) * 60 + \
-                           ((gps_mid  >>  6) & 0x7) * 10 + \
-                           ((gps_mid  >>  2) & 0xF) + gps_us*0.000001
+        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_10us:05d}'
 
-        gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_us:06d}'
-
-        return gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status
+        if(verbose):
+            print(gps_day_of_year, gps_utc_sec, gps_10us, gps_status)
+            
+        return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
     def _decode_ette(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'event')
@@ -830,9 +838,9 @@ class FZReader:
             NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
             if(self.return_all_sector_values): all_sector_values['I16'] = sector_values
 
-            gps_truetime_grs = True
+            gps_system = 'truetime/grs'
             gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_truetime(
+            gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
                 grs_data_10MHz, grs_data_time, grs_data_day)
 
             version_dependent_elements = dict(
@@ -863,9 +871,9 @@ class FZReader:
                 adc_values = sector_values[4:124]
                 if(self.return_all_sector_values): all_sector_values['I16'] = sector_values[:4] + sector_values[124:]
 
-            gps_truetime_grs = False
+            gps_system = 'michigan'
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_gps(
+            gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_michigan_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
 
         record.update(dict(
@@ -874,12 +882,13 @@ class FZReader:
             event_num           = event_num, 
             livetime_sec        = livetime_sec, 
             livetime_ns         = livetime_ns,
-            gps_truetime_grs    = gps_truetime_grs,
+            gps_system          = gps_system,
             gps_data            = gps_data,
-            gps_day_of_year     = gps_day_of_year,
-            gps_utc_time_sec    = gps_utc_time_sec,
+            gps_mjd             = gps_mjd,
+            gps_utc_sec         = gps_utc_sec,
+            gps_ns              = gps_ns,
             gps_utc_time_str    = gps_utc_time_str,
-            gps_status          = gps_status,
+            gps_is_good         = gps_is_good,
             trigger_code        = trigger_code,
             event_type          = event_type,
             nadc                = nadc,
@@ -917,21 +926,22 @@ class FZReader:
                 NFIRST += 70
                 adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
 
-            gps_truetime_grs = False
+            gps_system = 'michigan'
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
-            gps_day_of_year, gps_utc_time_sec, gps_utc_time_str, gps_status = self._decode_gps(
+            gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_michigan_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
             
             record.update(dict(
                 record_was_decoded  = True,
                 run_num             = run_num, 
                 frame_num           = frame_num, 
-                gps_truetime_grs    = gps_truetime_grs,
+                gps_system          = gps_system,
                 gps_data            = gps_data,
-                gps_day_of_year     = gps_day_of_year,
-                gps_utc_time_sec    = gps_utc_time_sec,
+                gps_mjd             = gps_mjd,
+                gps_utc_sec         = gps_utc_sec,
+                gps_ns              = gps_ns,
                 gps_utc_time_str    = gps_utc_time_str,
-                gps_status          = gps_status,
+                gps_is_good         = gps_is_good,
                 event_type          = 'pedestal',
                 nadc                = nadc,
                 adc_values          = adc_values,
