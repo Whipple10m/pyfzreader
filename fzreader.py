@@ -91,11 +91,13 @@ def get_camera_geometry_by_nadc(n):
     return _camera_cache.get(str((nadc+11)//12*12))
 
 def get_year_by_run_number(run_number):
-    data = [ [     0, 1994, 49353 ],
+    data = [ [     0,    0,     0 ], # Test runs have MJD=0
              [  1144, 1995, 49718 ], # validated FZ file scan
              [  4157, 1996, 50083 ], # validated FZ file scan
              [  7127, 1997, 50449 ], # guest guess from logsheet DB
              [  9121, 1998, 50814 ], # validated logsheet DB
+             [  9297, 1997, 50449 ], # out of sequence runs
+             [  9666, 1998, 50814 ], # back to sequence
              [ 11821, 1999, 51179 ], # validated FZ file scan
              [ 14192, 2000, 51544 ], # validated logsheet DB
              [ 16826, 2001, 51910 ], # validated logsheet DB
@@ -769,7 +771,7 @@ class FZReader:
         gps_ns = grs_10MHz_scaler * 100
 
         gps_status = (grs_day >> 16) & 0xF
-        gps_is_good = True if gps_status&0x8 else False
+        gps_is_good = True if (gps_status&0x8 and 1<=gps_day_of_year<=366 and 0<=gps_utc_sec<=86402) else False
 
         gps_utc_time_str = f'{(grs_time>>16)&0xFF:02x}:{(grs_time>>8)&0xFF:02x}:{grs_time&0xFF:02x}.{grs_10MHz_scaler:07d}'
 
@@ -798,7 +800,7 @@ class FZReader:
         gps_ns = gps_10us * 10000
 
         gps_status = (gps_low >> 2) & 0xF
-        gps_is_good = True if gps_status==0 else False
+        gps_is_good = True if (gps_status==0 and 1<=gps_day_of_year<=366 and 0<=gps_utc_sec<=86402) else False
 
         gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_10us:05d}'
 
@@ -871,7 +873,7 @@ class FZReader:
                 adc_values = sector_values[4:124]
                 if(self.return_all_sector_values): all_sector_values['I16'] = sector_values[:4] + sector_values[124:]
 
-            gps_system = 'michigan'
+            gps_system = 'xl-dc/michigan'
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_michigan_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
