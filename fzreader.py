@@ -90,6 +90,35 @@ def get_camera_geometry_by_nadc(n):
             _camera_cache = json.load(f)
     return _camera_cache.get(str((nadc+11)//12*12))
 
+def get_year_by_run_number(run_number):
+    data = [ [     0, 1994, 49353 ],
+             [  1144, 1995, 49718 ], # validated FZ file scan
+             [  4157, 1996, 50083 ], # validated FZ file scan
+             [  7127, 1997, 50449 ], # guest guess from logsheet DB
+             [  9121, 1998, 50814 ], # validated logsheet DB
+             [ 11821, 1999, 51179 ], # validated FZ file scan
+             [ 14192, 2000, 51544 ], # validated logsheet DB
+             [ 16826, 2001, 51910 ], # validated logsheet DB
+             [ 19022, 2002, 52275 ], # validated FZ file scan
+             [ 23442, 2003, 52640 ], # validated logsheet DB
+             [ 26087, 2004, 53005 ], # validated logsheet DB
+             [ 28233, 2005, 53371 ], # validated logsheet DB
+             [ 30563, 2006, 53736 ], # validated logsheet DB
+             [ 32558, 2007, 54101 ], # validated logsheet DB
+             [ 34104, 2008, 54466 ], # validated FZ file scan
+             [ 35575, 2009, 54832 ], # validated FZ file scan
+             [ 36865, 2010, 55197 ], # validated FZ file scan
+             [ 38406, 2011, 55562 ], # validated FZ file scan
+             [ 39395, 0, 0 ] ]
+    year = 0
+    mjd = 0
+    for i in range(len(data)):
+        if(run_number>=data[i][0]):
+            year, mjd = data[i][1:]
+        else:
+            break
+    return year, mjd
+
 class FZDecodeError(Exception):
     """Exception raised when an error occurs while decoding a ZEBRA/GDF record."""
     pass
@@ -180,9 +209,12 @@ class FZReader:
         if(not filename):
             raise RuntimeError('No filename given')
         self.runno = 0
+        self.nominal_year = 0
+        self.nominal_year_mjd = 0
         match = re.search(r"gt(\d+)", filename)
         if match:
             self.runno = int(match.group(1))
+            self.nominal_year, self.nominal_year_mjd = get_year_by_run_number(self.runno)
         self.runno_mismatch = 0
         self.file = None
         self.saved_pdata = b''
@@ -276,6 +308,18 @@ class FZReader:
         """
         return self.runno
     
+    def nominal_year(self):
+        """
+        Get the nominal year based on the run number of the file being read.
+        """
+        return self.nominal_year
+    
+    def nominal_year_start_mjd(self):
+        """
+        Get the MJD in Jan 1 of the nominal year based on the run number of the file being read.
+        """
+        return self.nominal_year_mjd
+
     def run_number_mismatches(self):
         """
         Get the number of run number mismatches in packet headers found in the file.
