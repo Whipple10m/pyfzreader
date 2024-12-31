@@ -798,7 +798,7 @@ class FZReader:
         gps_ns = gps_10us * 10000
 
         gps_status = (gps_low >> 2) & 0xF
-        gps_is_good = True if gps_status&0x8 else False
+        gps_is_good = True if gps_status==0 else False
 
         gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_10us:05d}'
 
