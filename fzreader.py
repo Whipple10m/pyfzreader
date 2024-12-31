@@ -775,7 +775,7 @@ class FZReader:
 
         return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
-    def _decode_michigan_gps(self, gps_low, gps_mid, gps_high, verbose = True):
+    def _decode_michigan_gps(self, gps_low, gps_mid, gps_high, verbose=False):
         # Decode old Whipple GPS (See GPSTIME from fz2red)
 
         gps_day_of_year = ((gps_high >> 14) & 0x3) * 100 + \
@@ -804,7 +804,7 @@ class FZReader:
 
         if(verbose):
             print(gps_day_of_year, gps_utc_sec, gps_10us, gps_status)
-            
+
         return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
     def _decode_ette(self, NDW, data):
