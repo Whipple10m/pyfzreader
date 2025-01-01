@@ -806,7 +806,19 @@ class FZReader:
         gps_utc_time_str = f'{gps_high&0x3F:02x}:{(gps_mid>>9)&0x7F:02x}:{(gps_mid>>2)&0x7F:02x}.{gps_10us:05d}'
 
         if(verbose):
-            print(gps_day_of_year, gps_utc_sec, gps_10us, gps_status)
+            print("GPS:",gps_day_of_year, gps_utc_sec, gps_10us, gps_status)
+
+        return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
+
+    def _decode_hytec(self, hytec_ns, hytec_sec, hytec_mjd):
+        gps_mjd = hytec_mjd
+        gps_utc_sec = hytec_sec # Adjust me for UTC ?
+        gps_ns = hytec_ns
+        gps_hr = gps_utc_sec//3600
+        gps_mn = (gps_utc_sec%3600)//60
+        gps_sc = gps_utc_sec%60
+        gps_utc_time_str = f'{gps_hr:02d}:{gps_mn:02d}:{gps_sc:02d}.{hytec_ns:09d}'
+        gps_is_good = True
 
         return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
@@ -820,8 +832,20 @@ class FZReader:
             NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 20)
             nadc, run_num, event_num, livetime_sec, livetime_ns = sector_values[0:5]
             ntrigger, elaptime_sec, elaptime_ns = sector_values[13:16]
-            grs_data_10MHz, grs_data_time, grs_data_day = sector_values[16:19]
             if(self.return_all_sector_values): all_sector_values['I32'] = sector_values
+
+            if(self.run_number is None or self.runno<=31781):
+                grs_data_10MHz, grs_data_time, grs_data_day = sector_values[16:19]
+                gps_system = 'truetime/grs'
+                gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
+                gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
+                    grs_data_10MHz, grs_data_time, grs_data_day)
+            else:
+                gps_system = 'hytec'
+                hytec_mjd, hytec_sec, hytec_ns = sector_values[10:13]
+                gps_data = ( hytec_ns, hytec_sec, hytec_mjd )
+                gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_hytec(
+                    hytec_ns, hytec_sec, hytec_mjd)
 
             NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
             trigger_code = sector_values[0]
@@ -840,11 +864,6 @@ class FZReader:
             # NFIRST = self._skip_sector(NFIRST, NDW, data, 28, 2) 
             NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
             if(self.return_all_sector_values): all_sector_values['I16'] = sector_values
-
-            gps_system = 'truetime/grs'
-            gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
-            gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
-                grs_data_10MHz, grs_data_time, grs_data_day)
 
             version_dependent_elements = dict(
                 elaptime_sec        = elaptime_sec,
