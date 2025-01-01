@@ -834,7 +834,7 @@ class FZReader:
             ntrigger, elaptime_sec, elaptime_ns = sector_values[13:16]
             if(self.return_all_sector_values): all_sector_values['I32'] = sector_values
 
-            if(self.run_number is None or self.runno<=31781):
+            if(self.run_number is None or self.runno<=34171): # 31781):
                 grs_data_10MHz, grs_data_time, grs_data_day = sector_values[16:19]
                 gps_system = 'truetime/grs'
                 gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
