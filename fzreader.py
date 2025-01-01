@@ -92,9 +92,10 @@ def get_camera_geometry_by_nadc(n):
 
 def get_year_by_run_number(run_number):
     data = [ [     0,    0,     0 ], # Test runs have MJD=0
+             [   100, 1994, 49353 ], # gt00236 is first fz file available
              [  1144, 1995, 49718 ], # validated FZ file scan
              [  4157, 1996, 50083 ], # validated FZ file scan
-             [  7127, 1997, 50449 ], # guest guess from logsheet DB
+             [  7127, 1997, 50449 ], # best guess from logsheet DB
              [  9121, 1998, 50814 ], # validated logsheet DB
              [  9297, 1997, 50449 ], # out of sequence runs
              [  9666, 1998, 50814 ], # back to sequence
