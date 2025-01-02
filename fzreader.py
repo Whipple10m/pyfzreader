@@ -889,7 +889,7 @@ class FZReader:
             )
         else:
             NFIRST, l32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
-            trigger_code = sector_values[0]
+            trigger_code = l32_sector_values[0]
             event_type = 'pedestal' if trigger_code==1 else 'sky'
 
             NFIRST, i32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 13 if record['gdf_version'] >= 27 else 10)
@@ -897,7 +897,6 @@ class FZReader:
 
             if(record['gdf_version'] >= 27):
                 NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc)
-                if(self.unpack_all_values): all_values['adc'] = adc_values
 
                 NFIRST, i16_sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
                 gps_data_high, gps_data_mid, gps_data_low = i16_sector_values[0:3]
