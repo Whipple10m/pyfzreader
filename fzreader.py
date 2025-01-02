@@ -194,7 +194,7 @@ class FZReader:
     """
 
     def __init__(self, filename, verbose=False, verbose_file=None, 
-                 return_all_sector_values = False, resynchronise_header = False) -> None:
+                 unpack_all_values = False, resynchronise_header = False) -> None:
         """
         Initialize the FZReader.
 
@@ -226,7 +226,7 @@ class FZReader:
         self.vstream = sys.stdout
         self.end_of_run = False
         self.resynchronise_header = resynchronise_header
-        self.return_all_sector_values = return_all_sector_values
+        self.unpack_all_values = unpack_all_values
         self.packet_headers_found = 0
         self.nbytes_read = 0
         self.ph_start_byte = 0
@@ -695,29 +695,33 @@ class FZReader:
         return NFIRST
 
     def _unpack_sector(self, NFIRST, NDW, data, nitems, datum_code, datum_len):
-        if(NFIRST+1 > NDW):
-            raise FZDecodeError(f'GDF bank data does not have block header: {NFIRST}+1 > {NDW}. PH start byte: {self.ph_start_byte}.')
-        block_header, = struct.unpack('>I',data[NFIRST*4:(NFIRST+1)*4])
-        NFIRST += 1
-        NW = block_header>>4
-        if(NW != (nitems*datum_len + 3)//4):
-            raise FZDecodeError(f'GDF bank data block size not as expected: {NW} != {nitems*datum_len//4}. PH start byte: {self.ph_start_byte}.')
-        if(NFIRST+NW > NDW):
-            raise FZDecodeError(f'GDF bank data does not have full block: {NFIRST}+{NW} > {NDW}. PH start byte: {self.ph_start_byte}.')
+        NEW_NFIRST = self._skip_sector(NFIRST, NDW, data, nitems, datum_len)
+        NW = NEW_NFIRST - NFIRST - 1
         FMT = f'>{NW*4//datum_len}{datum_code}'
+        NFIRST += 1
         sector_values = struct.unpack(FMT,data[NFIRST*4:(NFIRST+NW)*4])
-        NFIRST += NW
         if(self.verbose=='max' or self.verbose=='bank'):
             print(f"BBH: NW={NW}",sector_values,file=self.vstream)
         elif(self.verbose):
             print(f"BBH: NW={NW}",file=self.vstream)
-        return NFIRST, sector_values
+        return NEW_NFIRST, sector_values
     
     def _unpack_sector_I32(self, NFIRST, NDW, data, nitems):
         return self._unpack_sector(NFIRST, NDW, data, nitems, 'I', 4)
 
     def _unpack_sector_I16(self, NFIRST, NDW, data, nitems):
-        return self._unpack_sector(NFIRST, NDW, data, nitems, 'H', 2)
+        # The GDF format stores 16-bit integers swapped pairwise so we need to swap them back
+        NEW_NFIRST = self._skip_sector(NFIRST, NDW, data, nitems, 2)
+        NW = NEW_NFIRST - NFIRST - 1
+        NFIRST += 1
+        i32_sector_values = struct.unpack(f'>{NW}I',data[NFIRST*4:(NFIRST+NW)*4])
+        swapped_data = struct.pack(f'{len(i32_sector_values)}I',*i32_sector_values)
+        sector_values = struct.unpack(f'{len(i32_sector_values)*2}H',swapped_data)
+        if(self.verbose=='max' or self.verbose=='bank'):
+            print(f"BBH: NW={NW}",sector_values,file=self.vstream)
+        elif(self.verbose):
+            print(f"BBH: NW={NW}",file=self.vstream)
+        return NEW_NFIRST, sector_values
 
     def _unpack_sector_F32(self, NFIRST, NDW, data, nitems):
         return self._unpack_sector(NFIRST, NDW, data, nitems, 'f', 4)
@@ -727,6 +731,19 @@ class FZReader:
 
     def _unpack_sector_S(self, NFIRST, NDW, data, nitems):
         return self._unpack_sector(NFIRST, NDW, data, nitems, 's', 1)
+
+    def _unpack_sector_values(self, sector_values, keys):
+        isv = 0
+        output_dict = dict()
+        for k in keys:
+            if(isinstance(k, (tuple, list))):
+                nsv = k[1]
+                output_dict[k[0]] = sector_values[isv:isv+nsv]
+                isv += nsv
+            else:
+                output_dict[k] = sector_values[isv]
+                isv += 1
+        return output_dict
 
     def _unpack_gdf_header(self, data, record_type):
         gdf_version, = struct.unpack('>I',data[0:4])
@@ -826,44 +843,43 @@ class FZReader:
         NFIRST, record = self._unpack_gdf_header(data, 'event')
         
         version_dependent_elements = dict()
-        all_sector_values = dict()
 
         if(record['gdf_version'] >= 74):
-            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 20)
-            nadc, run_num, event_num, livetime_sec, livetime_ns = sector_values[0:5]
-            ntrigger, elaptime_sec, elaptime_ns = sector_values[13:16]
-            if(self.return_all_sector_values): all_sector_values['I32'] = sector_values
+            NFIRST, i32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 20)
+            nadc, run_num, event_num, livetime_sec, livetime_ns = i32_sector_values[0:5]
+            ntrigger, elaptime_sec, elaptime_ns = i32_sector_values[13:16]
 
             if(self.run_number is None or self.runno<=34171): # 31781):
-                grs_data_10MHz, grs_data_time, grs_data_day = sector_values[16:19]
-                gps_system = 'truetime/grs'
+                grs_data_10MHz, grs_data_time, grs_data_day = i32_sector_values[16:19]
+                gps_system = 'truetime'
                 gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
                 gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
                     grs_data_10MHz, grs_data_time, grs_data_day)
             else:
                 gps_system = 'hytec'
-                hytec_mjd, hytec_sec, hytec_ns = sector_values[10:13]
+                hytec_mjd, hytec_sec, hytec_ns = i32_sector_values[10:13]
                 gps_data = ( hytec_ns, hytec_sec, hytec_mjd )
                 gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_hytec(
                     hytec_ns, hytec_sec, hytec_mjd)
 
-            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
-            trigger_code = sector_values[0]
+
+            NFIRST, l32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
+            trigger_code = l32_sector_values[0]
             event_type = 'pedestal' if (trigger_code & 0x01) else 'sky'
-            if(self.return_all_sector_values): all_sector_values['L32'] = sector_values
 
             trigger_data = ()
             if(ntrigger>0):
                 NFIRST, trigger_data = self._unpack_sector_I32(NFIRST, NDW, data, ntrigger)
 
-            adc_values = ()
+            adc_values = []
             if(nadc>0):
                 NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc)
 
-            # Prefer to explicitly skip this block to test consistancy of data
-            # NFIRST = self._skip_sector(NFIRST, NDW, data, 28, 2) 
-            NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
-            if(self.return_all_sector_values): all_sector_values['I16'] = sector_values
+            if(self.unpack_all_values):
+                NFIRST, i16_sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
+            else:
+                # Prefer to explicitly skip this block to test consistancy of data
+                NFIRST = self._skip_sector(NFIRST, NDW, data, 28, 2) 
 
             version_dependent_elements = dict(
                 elaptime_sec        = elaptime_sec,
@@ -872,28 +888,26 @@ class FZReader:
                 trigger_data        = trigger_data,
             )
         else:
-            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
+            NFIRST, l32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 7)
             trigger_code = sector_values[0]
             event_type = 'pedestal' if trigger_code==1 else 'sky'
-            if(self.return_all_sector_values): all_sector_values['L32'] = sector_values
 
-            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 13 if record['gdf_version'] >= 27 else 10)
-            nadc, run_num, event_num, livetime_sec, livetime_ns = sector_values[0:5]
-            if(self.return_all_sector_values): all_sector_values['I32'] = sector_values
+            NFIRST, i32_sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 13 if record['gdf_version'] >= 27 else 10)
+            nadc, run_num, event_num, livetime_sec, livetime_ns = i32_sector_values[0:5]
 
             if(record['gdf_version'] >= 27):
                 NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc)
+                if(self.unpack_all_values): all_values['adc'] = adc_values
 
-                NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
-                gps_data_mid, gps_data_high, _, gps_data_low = sector_values[0:4]
-                if(self.return_all_sector_values): all_sector_values['I16'] = sector_values
+                NFIRST, i16_sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 28)
+                gps_data_high, gps_data_mid, gps_data_low = i16_sector_values[0:3]
             else:
-                NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 144)
-                gps_data_mid, gps_data_high, _, gps_data_low = sector_values[:4]
-                adc_values = sector_values[4:124]
-                if(self.return_all_sector_values): all_sector_values['I16'] = sector_values[:4] + sector_values[124:]
+                NFIRST, i16_sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 144)
+                gps_data_high, gps_data_mid, gps_data_low = i16_sector_values[0:3]
+                adc_values = i16_sector_values[4:124]
+                i16_sector_values = i16_sector_values[:4] + i16_sector_values[124:]
 
-            gps_system = 'xl-dc/michigan'
+            gps_system = 'michigan'
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
             gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_michigan_gps(
                 gps_data_low, gps_data_mid, gps_data_high)
@@ -918,7 +932,25 @@ class FZReader:
         ))
 
         record.update(version_dependent_elements)
-        if(self.return_all_sector_values): record['all_sector_values'] = all_sector_values
+
+        if(self.unpack_all_values): 
+            all_values = dict()
+            all_values.update(self._unpack_sector_values(l32_sector_values, 
+                [ 'trigger', 'status', 'mark_gps', 'mark_open', 'mark_close', 'gate_open', 'gate_close' ]))
+            i32_keys = [ 'nadc', 'run', 'event', 'live_sec', 'live_ns',  'frame', 'frame_event', 'abort_cnt', 'nphs', 'nbrst' ]
+            if(record['gdf_version'] >= 27):
+                i32_keys += [ 'gps_mid', 'gps_high', 'gps_low' ]
+                if(record['gdf_version'] >= 74):
+                    i32_keys += [ 'ntrg', 'elaptime_sec', 'elaptime_ns', ('grs_clock',3), 'align' ]
+            all_values.update(self._unpack_sector_values(i32_sector_values, i32_keys))
+            all_values['adc'] = adc_values
+            if(record['gdf_version'] >= 74):
+                all_values['pattern'] = trigger_data
+            i16_keys = [ ('gps_clock',3), 'phase_delay', ('phs',8), ('burst',12) ]
+            if(record['gdf_version'] >= 27):
+                i16_keys += [ ('gps_status',2), ('track',2) ]
+            all_values.update(self._unpack_sector_values(i16_sector_values, i16_keys))
+            record['all_values'] = all_values
 
         return record
 
