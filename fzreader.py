@@ -851,7 +851,6 @@ class FZReader:
 
             if(self.run_number is None or self.runno<=34171): # 31781):
                 grs_data_10MHz, grs_data_time, grs_data_day = i32_sector_values[16:19]
-                gps_system = 'truetime'
                 gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
                 gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
                     grs_data_10MHz, grs_data_time, grs_data_day)
