@@ -938,7 +938,7 @@ class FZReader:
                 [ 'trigger', 'status', 'mark_gps', 'mark_open', 'mark_close', 'gate_open', 'gate_close' ]))
             i32_keys = [ 'nadc', 'run', 'event', 'live_sec', 'live_ns',  'frame', 'frame_event', 'abort_cnt', 'nphs', 'nbrst' ]
             if(record['gdf_version'] >= 27):
-                i32_keys += [ 'gps_mid', 'gps_high', 'gps_low' ]
+                i32_keys += [ 'gps_mjd', 'gps_sec', 'gps_ns' ]
                 if(record['gdf_version'] >= 74):
                     i32_keys += [ 'ntrg', 'elaptime_sec', 'elaptime_ns', ('grs_clock',3), 'align' ]
             all_values.update(self._unpack_sector_values(i32_sector_values, i32_keys))
@@ -956,28 +956,50 @@ class FZReader:
     def _decode_fttf(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'frame')
 
-        if(record['gdf_version'] < 74):
-            # Only support frame data before version 74
+        all_values = dict()
 
-            NFIRST = self._skip_sector(NFIRST, NDW, data, 2, 4) # STATUS
+        if(record['gdf_version'] < 80):
+            # Only support frame data before version 80
+
+            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 2) # STATUS
+            if(self.unpack_all_values): all_values.update(self._unpack_sector_values(sector_values, 
+                [ 'status', 'mark_gps' ]))
 
             NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 8 if record['gdf_version'] >= 27 else 5)
             nphs, nadc, nsca, run_num, frame_num = sector_values[0:5]
+            if(self.unpack_all_values): 
+                sector_keys = [ 'nphs', 'nadc', 'nsca', 'run', 'frame' ]
+                if(record['gdf_version'] >= 27):
+                    sector_keys += [ 'gps_mjd', 'gps_sec', 'gps_ns' ]
+                all_values.update(self._unpack_sector_values(sector_values, sector_keys))
 
             if(record['gdf_version'] >= 27):
-                NFIRST = self._skip_sector(NFIRST, NDW, data, nadc, 2) # CAL_ADC unused
-                NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc) # PED_ADC1
-                NFIRST = self._skip_sector(NFIRST, NDW, data, nadc, 2) # PED_ADC2 unused
-                NFIRST = self._skip_sector(NFIRST, NDW, data, nsca, 2) # SCALC unused
-                NFIRST = self._skip_sector(NFIRST, NDW, data, nsca, 2) # SCALS unused
-                NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 4+2+2*nphs)
-                gps_data_mid, gps_data_high, _, gps_data_low = sector_values[0:4]
+                if(self.unpack_all_values): 
+                    NFIRST, all_values['cal_adc'] = self._unpack_sector_I16(NFIRST, NDW, data, nadc)
+                    NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc) # PED_ADC1
+                    all_values['ped_adc1'] = adc_values
+                    NFIRST, all_values['ped_adc2'] = self._unpack_sector_I16(NFIRST, NDW, data, nadc)
+                    NFIRST, all_values['scalc'] = self._unpack_sector_I16(NFIRST, NDW, data, nsca)
+                    NFIRST, all_values['scals'] = self._unpack_sector_I16(NFIRST, NDW, data, nsca)
+                else:
+                    NFIRST = self._skip_sector(NFIRST, NDW, data, nadc, 2) # CAL_ADC unused                    
+                    NFIRST, adc_values = self._unpack_sector_I16(NFIRST, NDW, data, nadc) # PED_ADC1
+                    NFIRST = self._skip_sector(NFIRST, NDW, data, nadc, 2) # PED_ADC2 unused
+                    NFIRST = self._skip_sector(NFIRST, NDW, data, nsca, 2) # SCALC unused
+                    NFIRST = self._skip_sector(NFIRST, NDW, data, nsca, 2) # SCALS unused
+                NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 4+2+2*8)
+                gps_data_high, gps_data_mid, gps_data_low = sector_values[0:3]
+                if(self.unpack_all_values): 
+                    all_values.update(self._unpack_sector_values(sector_values, 
+                        [ ('gps_clock',3),'phase_delay',('phs1',8),('phs2',8),('gps_status',2) ]))
             else:
-                _ = self._skip_sector(NFIRST, NDW, data, 4+16+120*3+128*2, 2) # just verify block size
-                NFIRST += 1
-                gps_data_mid, gps_data_high, _, gps_data_low = struct.unpack('>4H',data[NFIRST*4:NFIRST*4+8])
-                NFIRST += 70
-                adc_values = struct.unpack('>120H',data[NFIRST*4:(NFIRST+60)*4])
+                NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 4+16+120*3+128*2)
+                gps_data_high, gps_data_mid, gps_data_low = sector_values[0:3]
+                adc_values = sector_values[70:190]
+                if(self.unpack_all_values): 
+                    all_values.update(self._unpack_sector_values(sector_values, 
+                        [ ('gps_clock',3),'phase_delay',('phs1',8),('phs2',8),('cal_adc',120),
+                          ('ped_adc1',120),('ped_adc2',120),('scalc',128),('scals',128) ]))
 
             gps_system = 'michigan'
             gps_data = ( gps_data_low, gps_data_mid, gps_data_high )
@@ -999,6 +1021,20 @@ class FZReader:
                 nadc                = nadc,
                 adc_values          = adc_values,
             ))
+        elif(self.unpack_all_values):
+            # For versions >=80 we only unpack into all values
+            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 2) # STATUS
+            all_values.update(self._unpack_sector_values(sector_values, [ 'status', 'mark_gps' ]))
+            NFIRST, sector_values = self._unpack_sector_I32(NFIRST, NDW, data, 8)
+            all_values.update(self._unpack_sector_values(sector_values, 
+                [ 'nphs', 'nadc', 'nsca', 'run', 'frame', 'gps_mjd', 'gps_sec', 'gps_ns' ]))
+            NFIRST, all_values['scals'] = self._unpack_sector_I16(NFIRST, NDW, data, all_values['nsca'])
+            NFIRST, sector_values = self._unpack_sector_I16(NFIRST, NDW, data, 4+2+2*8)
+            all_values.update(self._unpack_sector_values(sector_values, 
+                [ ('gps_clock',3),'phase_delay',('phs1',8),('phs2',8),('gps_status',2) ]))
+
+        if(self.unpack_all_values): 
+            record['all_values'] = all_values
 
         return record
 
