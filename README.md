@@ -28,14 +28,15 @@ This file can then be read into Python. For example, a crude script to calculate
     import json
     import numpy
     nped = 0
-    ped_sum = numpy.zeros(492) # Hardcoded for 490 pixel camera in this example
-    ped_sum_sq = numpy.zeros(492)
+    ped_sum = 0
+    ped_sum_sq = 0
     with open('gt012345.json', 'r') as fz:
         for r in json.load(fz):
-            if(r['record_type']=='event' and r['event_type']=='pedestal'):
+            if r['record_type'] in ('event', 'frame') and r['record_was_decoded']==True and r['event_type']=='pedestal':
+                adc = numpy.asarray(r['adc_values'])
                 nped += 1
-                ped_sum += numpy.asarray(r['adc_values'])
-                ped_sum_sq += numpy.asarray(r['adc_values'])**2
+                ped_sum = numpy.add(adc, ped_sum)
+                ped_sum_sq = numpy.add(adc**2, ped_sum_sq)
     ped_val = ped_sum/nped
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
 
@@ -46,16 +47,19 @@ The library can be used to read `fz` files directly, skipping the conversion to 
     import fzreader
     import numpy
     nped = 0
-    ped_sum = numpy.zeros(492) # Hardcoded for 490 pixel camera in this example
-    ped_sum_sq = numpy.zeros(492)
+    ped_sum = 0
+    ped_sum_sq = 0
     with fzreader.FZReader('gt012345.fz.bz2') as fz:
         for r in fz:
-            if(r['record_type']=='event' and r['event_type']=='pedestal'):
+            if fzreader.is_pedestal_event(r):
+                adc = numpy.asarray(r['adc_values'])
                 nped += 1
-                ped_sum += numpy.asarray(r['adc_values'])
-                ped_sum_sq += numpy.asarray(r['adc_values'])**2
+                ped_sum = numpy.add(adc, ped_sum)
+                ped_sum_sq = numpy.add(adc**2, ped_sum_sq)
     ped_val = ped_sum/nped
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
+
+where we have also used the `fzreader.is_pedestal_event(record)` function to replace the three-part test in the previous version.
 
 ## Generating images of events
 
@@ -113,22 +117,25 @@ The [GDF 10m event structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 - `'livetime_ns'`: number of nanoseconds counted by 10MHz livetime scaler since last 1-second marker.
 - `'elaptime_sec'`: number of seconds counted by 10MHz elapsed time scaler since start of run. Only present if `gdf_version>=74`.
 - `'elaptime_ns'`: number of nanoseconds counted by 10MHz elapsed time scaler since last 1-second marker. Only present if `gdf_version>=74`.
-- `'gps_truetime_grs'`: `True` if GPS data is provided by Truetime XL-DC/XL-AK clock with the Wisconsin GRS CAMAC interface, `False` otherwise, indicating data comes from the Michigan CAMAC clock interface.
-- `'gps_data'`: raw data provided by GRS clock. Format depends on clock used (see `'gps_truetime_grs'` element, above).
-- `'gps_day_of_year'`: the day of year decoded from the GPS system.
-- `'gps_utc_time_sec'`: the number of seconds and fraction of seconds decoded from the GPS system.
+- `'gps_system'`: the GPS system from which the timestamp is derived, one of `'michigan'`, `'grs'`, or '`hytec'`, as discussed in the section on clocks, below.
+- `'gps_data'`: raw data provided by GRS clock. Format depends on clock system used (see `'gps_system'` element, above).
+- `'gps_mjd'`: the integer MJD fully or partially decoded by the GPS system, as discussed in the section on clocks, below. 
+- `'gps_utc_sec'`: the integer number of seconds since UTC midnight, as decoded by the GPS system.
+- `'gps_ns'`: fraction of the second, whose precision depends on the GPS system used, expressed as nanoseconds.
 - `'gps_utc_time_str'`: the time from the GPS system in string format `'hh:mm:ss.sssssss'`.
+- `'gps_is_good'`: flag indicating that the GPS timestamp *might* be good.
 - `'event_type'`: either `'pedestal'` or `'sky'`.
 - `'nadc'`: the number of ADC channels in the event. The ADCs each have 12 channels, so this will usually be larger than the number of pixels in the camera. For the 331 pixel camera `nadc=336`, for the 490 pixel camera `nadc=492`.
+- `'adc_values'`: array of size `'nadc'` giving the ADC values (I16).
 - `'ntrigger'`: number of trigger words in the event. This depends on what epoch the data comes from, before the Leeds PST or not, and whether trigger readout is enabled. Only present if `gdf_version>=74`.
 - `'trigger_data'`: array of size `'ntrigger'` giving the trigger data words (I32). Only present if `gdf_version>=74`.
-- `'adc_values'`: array of size `'nadc'` giving the ADC values (I16).
+- `'all_values'`: dictionary of all values found in the GDF event structure, if the `'return_all_values'` option has been specified in the class.
 
-Other data items present in the FORTRAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
+By default, the reader only extracts the elements of the record that seemed relevant to me, given the epoch of the data. The `'return_all_values'` can be used to force the reader to extract all data in the GDF record, irrespective of whether they are being written with valid data. Please contact me if you would like any of these values returned by default.
 
 ### 10m frame
 
-Before GDF version 74, the on-the-fly calibration data were recorded in the [GDF 10m frame structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L413), with the pedestal event ADC values being the most important component. The frame records are partially decoded into a Python dictionary that contains the following items:
+Before GDF version 80, the on-the-fly calibration data were recorded in the [GDF 10m frame structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L413), with the pedestal event ADC values being the most important component. The frame records are partially decoded into a Python dictionary that contains the following items:
 
 - `'record_type'`: `'frame'`.
 - `'record_time_mjd'`: see above.
@@ -139,14 +146,17 @@ Before GDF version 74, the on-the-fly calibration data were recorded in the [GDF
 - `'frame_num'`: event number, starting at one.
 - `'gps_truetime_grs'`: `False`, see above.
 - `'gps_data'`: see above.
-- `'gps_day_of_year'`: see above.
-- `'gps_utc_time_sec'`: see above.
+- `'gps_system'`: `'michigan'`, see above.
+- `'gps_mjd'`: see above.
+- `'gps_utc_sec'`: see above.
 - `'gps_utc_time_str'`: see above.
+- `'gps_is_good'`: see above.
 - `'event_type'`: `'pedestal'`.
 - `'nadc'`: see above.
-- `'adc_values'`: see above.
+- `'adc_values'`: the ADC values in the `'ped_adc1'` sector of the GDF record.
+- `'all_values'`: dictionary of all values found in the GDF frame structure, if the `'return_all_values'` option has been specified in the class.
 
-Other data items present in the FORTRAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
+By default, the reader only extracts the elements of the record that seemed relevant to me, given the epoch of the data. The `'return_all_values'` can be used to force the reader to extract all data in the GDF record, irrespective of whether they are being written with valid data. Please contact me if you would like any of these values returned by default.
 
 ### Tracking status
 
@@ -196,8 +206,6 @@ The [GDF HV-record structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 - `'i_supply'`: array of size `'num_channels'` giving measured power-supply current in each channel.
 - `'i_anode'`: array of size `'num_channels'` giving measured anode current in each channel.
 
-Other data items present in the FORTRAN structure are not decoded by the reader as they don't seem to be relevant for the data files that I have. Please contact me if you need any of them to be extracted.
-
 ### CCD data
 
 The [GDF CCD structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f360979dd816c0fdd3b668558353/gdf.for#L337) is recognized by the reader but not decoded. The following Python dictionary is returned:
@@ -209,6 +217,22 @@ The [GDF CCD structure](https://github.com/Whipple10m/GDF/blob/24572fc741a8f3609
 - `'record_was_decoded'`: `False`, the reader does not decode the CCD records.
 
 Please contact me if you need the CCD data to be extracted.
+
+## Timestamping
+
+A set of scalers and GPS timestamping systems were used to measure the live time, elapsed time, and absolute time of the events recorded at Whipple. This section is intended only as a brief outline of these, sufficient to describe the timing values that the GDF reader provides.
+
+A 10MHz clock, derived locally from a frequency generator, was counted by two 48-bit scalers. The first was gated by the global veto, providing a running estimate of the total livetime in the run, available as `'livetime_sec'` and `'livetime_ns'` in the dictionary for the `event` and `frame` records. The second was an ungated count of the oscillator, providing the total elapsed time since the start of the run, only available for starting from GDF version 74, corresponding to run number 9042, and available as `'elaptime_sec'` and `'elaptime_sec'` in the record dictionary. The first step of any analysis was usually to calibrate the 10MHz oscillator frequency against the GPS system using the one-pulse per second (1PPS) markers from the GPS.
+
+Three different absolute GPS timestamping systems were used during the `GRANITE` epoch, two based on a Truetime GPS clock (initally XL-DC then XL-AK), and the third a dedicated Hytec timestamp module.
+
+1. Before the 1997 observing season, i.e. up until approximately September 1997, and corresponding to run numbers less than approximately 9000 or GDF versions before 80, the Truetime XL-DC was read out by a set of CAMAC modules known as the `Michigan` clock interface, and described by [Freeman and Akerlof, NIM A320, 1992 305-309](https://deepblue.lib.umich.edu/bitstream/handle/2027.42/29901/0000258.pdf). The GPS time was provided by the XL-DC over a 48-bit wide parallel port, with quarter millisecond resolution, and digitized by a CAMAC module, from which three 16-bit values are stored in the GDF record. The system provided a BCD coded UTC time in hours, minutes, seconds and milliseconds, a quarter millisecond count, the day of the year (DOY), and some status bits.
+
+2. Between 1997-10-29 (run number 9042) and 2006-06-19 (run number 31781) the XL-DC (initially), and a Truetime XL-AK clock (subsequently) were digitized by a [Wisconsin GRS2 module](https://github.com/Whipple10m/Documentation/blob/main/components/gpsmanual2a.pdf) which counted the local 10MHz frequency described above, and combined that with the GPS time read out from the Truetime serial port, as described in the GRS2 manual. These values were stored as three 32-bit values in the GDF record, providing the BCD coded UTC time in hours, minutes and seconds, the number of 10MHz ticks since the last second marker, the DOY, and some status bits. The serial connection between the GRS2 and the Truetime ceased functioning after 2006-06-19 (run 31781) but the module remained in the system until 2008-01-15 (being removed after run 34171). No absolute time is available during this period.
+
+3. From 2008-01-15 a Hytec timestamping module (GPS92) was used to provide absolute timestamps. This system was interpreted by the data acquisition system which wrote the integer MJD, number of seconds since GPS (or UTC?) midnight, and the number of nanoseconds since the 1PPS into the GDF record. The Hytec GPS was non-functional between 2008-04-25 (run 34973) and 2009-06-04 (run 36727) inclusive due to antenna damage. After repair, it functioned until the end of data taking with the 10m on 2011-05-31.
+
+To insulate users of the `fzreader` from these details the GPS data relevant to each epoch is used to provide the timestamp in a consistent format. For the epoch of the Truetime GPS (`Michigan` and `GRS2`) the GPS DOY is combined with an estimate of the year generated from the run number, using a hardcoded lookup table, to calculate the MJD, which is combined with the UTC second number and fraction of the second. For the `Hytec` epoch, the values provided in GDF are used directly, corrected for the difference between GPS and UTC times (number of leap seconds).
 
 ## Understanding the reader
 
