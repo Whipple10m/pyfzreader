@@ -836,6 +836,26 @@ class FZReader:
     def _decode_hytec(self, hytec_ns, hytec_sec, hytec_mjd):
         gps_mjd = hytec_mjd
         gps_utc_sec = hytec_sec # Adjust me for UTC ?
+        if self.run_number<=34429:
+            # See http://veritas.sao.arizona.edu/private/elog/10M-Operations/13
+            # and http://veritas.sao.arizona.edu/private/elog/10M-Operations/35
+            # Before 34429, the Hytec output was in GPS time, not UTC
+            # GPS-UTC = 14sec from 2006-01-01 until 2009-01-01 (Hytec GPS installed 2008-01-17)
+            gps_utc_sec -= 14 
+            if(gps_utc_sec < 0):
+                gps_utc_sec += 86400
+                gps_mjd -= 1
+        elif self.run_number>=36728:
+            # See http://veritas.sao.arizona.edu/private/elog/10M-Operations/127
+            # After 36728, the Hytec output was again in GPS time
+            # GPS-UTC = 15 sec from 2009-01-01 until 2012-07-01 (end-of-life for the 10m was 2011)
+            gps_utc_sec -= 15 
+            if(gps_utc_sec < 0):
+                gps_utc_sec += 86400
+                gps_mjd -= 1
+        else:
+            # Othewise, Hytec output was UTC time
+            pass
         gps_ns = hytec_ns
         gps_hr = gps_utc_sec//3600
         gps_mn = (gps_utc_sec%3600)//60
@@ -855,13 +875,14 @@ class FZReader:
             nadc, run_num, event_num, livetime_sec, livetime_ns = i32_sector_values[0:5]
             ntrigger, elaptime_sec, elaptime_ns = i32_sector_values[13:16]
 
-            if(self.run_number is None or self.runno<=34171): # 31781):
+            if(self.run_number is None or self.runno<=34171):
                 grs_data_10MHz, grs_data_time, grs_data_day = i32_sector_values[16:19]
                 gps_system = 'grs'
                 gps_data = ( grs_data_10MHz, grs_data_time, grs_data_day )
                 gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good = self._decode_truetime(
                     grs_data_10MHz, grs_data_time, grs_data_day)
             else:
+                # See http://veritas.sao.arizona.edu/private/elog/10M-Operations/13
                 gps_system = 'hytec'
                 hytec_mjd, hytec_sec, hytec_ns = i32_sector_values[10:13]
                 gps_data = ( hytec_ns, hytec_sec, hytec_mjd )
