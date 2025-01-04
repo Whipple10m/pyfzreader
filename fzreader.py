@@ -206,6 +206,9 @@ class FZReader:
                 diagnosing the decoding of the ZEBRA/GDF data elements.
             verbose_file (str): The file to write verbose output to (default 
                 is None, corresponding to stdout).
+            unpack_all_values (bool): If True, unpack all values in the
+                ZEBRA/GDF event and frame records. Otherwise, only unpack 
+                the values that are most relevant.
             resynchronise_header (bool): If True, resynchronise the header.
         """
         self.filename = filename
@@ -371,6 +374,9 @@ class FZReader:
                 for each of the GDF records supported.
 
         Raises:
+            RuntimeError: If the file is not open. Must call __enter__ first,
+                or use context manager.
+
             EOFError: If the GDF file is incomplete, i.e. if the file ends 
                 abruptly while decoding a ZEBRA physical or logical
                 record, or the end-of-file record is not found before the

@@ -117,7 +117,7 @@ The [GDF 10m event structure](https://github.com/Whipple10m/GDF/blob/24572fc741a
 - `'livetime_ns'`: number of nanoseconds counted by 10MHz livetime scaler since last 1-second marker.
 - `'elaptime_sec'`: number of seconds counted by 10MHz elapsed time scaler since start of run. Only present if `gdf_version>=74`.
 - `'elaptime_ns'`: number of nanoseconds counted by 10MHz elapsed time scaler since last 1-second marker. Only present if `gdf_version>=74`.
-- `'gps_system'`: the GPS system from which the timestamp is derived, one of `'michigan'`, `'grs'`, or '`hytec'`, as discussed in the section on clocks, below.
+- `'gps_system'`: the GPS system from which the timestamp is derived, one of `'michigan'`, `'grs'`, or '`hytec'`, as discussed in the section on timestamps, below.
 - `'gps_data'`: raw data provided by GRS clock. Format depends on clock system used (see `'gps_system'` element, above).
 - `'gps_mjd'`: the integer MJD fully or partially decoded by the GPS system, as discussed in the section on clocks, below. 
 - `'gps_utc_sec'`: the integer number of seconds since UTC midnight, as decoded by the GPS system.
@@ -141,12 +141,11 @@ Before GDF version 80, the on-the-fly calibration data were recorded in the [GDF
 - `'record_time_mjd'`: see above.
 - `'record_time_str'`: see above. 
 - `'gdf_version'`: see above.
-- `'record_was_decoded'`: `True` if `gdf_version<74`. Otherwise `False`, in which case none of the following elements will be present.
+- `'record_was_decoded'`: `True` if `gdf_version<80`. Otherwise, `False`, in which case none of the following elements will be present, except `'all_values'` if the `'return_all_values'` has been selected.
 - `'run_num'`: see above.
 - `'frame_num'`: event number, starting at one.
-- `'gps_truetime_grs'`: `False`, see above.
-- `'gps_data'`: see above.
 - `'gps_system'`: `'michigan'`, see above.
+- `'gps_data'`: see above.
 - `'gps_mjd'`: see above.
 - `'gps_utc_sec'`: see above.
 - `'gps_utc_time_str'`: see above.
@@ -232,7 +231,7 @@ Three different absolute GPS timestamping systems were used during the `GRANITE`
 
 3. From 2008-01-15 (run 34172) a Hytec timestamping module (GPS92) was used to provide absolute timestamps. This system was interpreted by the data acquisition system which wrote the integer MJD, number of seconds since GPS (or UTC?) midnight, and the number of nanoseconds since the 1PPS into the GDF record. The Hytec GPS was non-functional between 2008-04-25 (run 34973) and 2009-06-04 (run 36727) inclusive due to antenna damage. After repair, it functioned until the end of data taking with the 10m on 2011-05-31.
 
-To insulate users of the `fzreader` from these details the GPS data relevant to each epoch is used to provide the timestamp in a consistent format. For the epoch of the Truetime GPS (`Michigan` and `GRS2`) the GPS DOY is combined with an estimate of the year generated from the run number, using a hardcoded lookup table, to calculate the MJD, which is combined with the UTC second number and fraction of the second. For the `Hytec` epoch, the values provided in GDF are used directly, corrected for the difference between GPS and UTC times (number of leap seconds).
+To insulate users of the `fzreader` from these details, the GPS data relevant to each epoch is used to provide the timestamp in a consistent format. For the epoch of the Truetime GPS (`Michigan` and `GRS2`) the GPS DOY is combined with an estimate of the year generated from the run number, using a hardcoded lookup table, to calculate the MJD, which is combined with the UTC second number and fraction of the second. For the `Hytec` epoch, the values provided in GDF are used directly, corrected for the difference between GPS and UTC times (number of leap seconds).
 
 ## Understanding the reader
 
