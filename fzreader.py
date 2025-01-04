@@ -272,6 +272,8 @@ class FZReader:
             self.file.close()
         if self.vstream is not sys.stdout:
             self.vstream.close()
+        if isinstance(self.file, subprocess.Popen):
+            self.file.terminate()
         self.vstream = sys.stdout
         self.file = None
 
@@ -542,7 +544,7 @@ class FZReader:
                     return None,None,None
                 if(NWTOLR != 8):
                     raise FZDecodeError(f'ZEBRA physical packet has unexpected data before logical record. PH start byte: {self.ph_start_byte}.')
-        
+
             if(len(pdata) == 4):
                 NWLR = struct.unpack('>I',pdata[0:4])[0]
                 if(NWLR != 0):
