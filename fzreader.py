@@ -838,7 +838,7 @@ class FZReader:
     def _decode_hytec(self, hytec_ns, hytec_sec, hytec_mjd):
         gps_mjd = hytec_mjd
         gps_utc_sec = hytec_sec # Adjust me for UTC ?
-        if self.run_number<=34429:
+        if self.runno<=34429:
             # See http://veritas.sao.arizona.edu/private/elog/10M-Operations/13
             # and http://veritas.sao.arizona.edu/private/elog/10M-Operations/35
             # Before 34429, the Hytec output was in GPS time, not UTC
@@ -847,7 +847,7 @@ class FZReader:
             if(gps_utc_sec < 0):
                 gps_utc_sec += 86400
                 gps_mjd -= 1
-        elif self.run_number>=36728:
+        elif self.runno>=36728:
             # See http://veritas.sao.arizona.edu/private/elog/10M-Operations/127
             # After 36728, the Hytec output was again in GPS time
             # GPS-UTC = 15 sec from 2009-01-01 until 2012-07-01 (end-of-life for the 10m was 2011)
