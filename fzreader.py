@@ -841,7 +841,7 @@ class FZReader:
         gps_mn = (gps_utc_sec%3600)//60
         gps_sc = gps_utc_sec%60
         gps_utc_time_str = f'{gps_hr:02d}:{gps_mn:02d}:{gps_sc:02d}.{hytec_ns:09d}'
-        gps_is_good = True
+        gps_is_good = True if 0<=(gps_mjd-self.nominal_year_mjd)<=366 else False
 
         return gps_mjd, gps_utc_sec, gps_ns, gps_utc_time_str, gps_is_good
 
