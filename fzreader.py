@@ -1155,9 +1155,9 @@ class FZReader:
         return f'{x//36000:02d}h{(x//600)%60:02d}m{(x%600)/10.0:04.1f}s'
 
     def _dms_string(self, angle_rad):
-        TENTHSEC = 10*3600.0*180.0/3.14159265358979324
-        x = int(round(abs(angle_rad) * TENTHSEC))
-        return f'{"+" if angle_rad>=0 else "-"}{x//36000:03d}d{(x//600)%60:02d}m{(x%600)/10.0:04.1f}s'
+        SEC = 3600.0*180.0/3.14159265358979324
+        x = int(round(abs(angle_rad) * SEC))
+        return f'{"+" if angle_rad>=0 else "-"}{x//3600:02d}d{(x//60)%60:02d}m{x%60:02d}s'
 
     def _decode_trrt(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'tracking')
