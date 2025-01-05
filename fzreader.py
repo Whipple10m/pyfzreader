@@ -223,6 +223,7 @@ class FZReader:
             self.nominal_year, self.nominal_year_mjd = get_year_by_run_number(self.runno)
         self.runno_mismatch = 0
         self.file = None
+        self.file_subprocess = None
         self.saved_pdata = b''
         self.verbose = verbose
         self.verbose_file = verbose_file
@@ -242,13 +243,15 @@ class FZReader:
         Returns:
             FZReader: The FZReader object.
         """
+        self.file_subprocess = None
         if self.filename.endswith('.bz2'):
             self.file = bz2.open(self.filename, 'rb')
         elif self.filename.endswith('.gz') or self.filename.endswith('.fzg'):
             self.file = gzip.open(self.filename, 'rb')
         elif self.filename.endswith('.Z') or self.filename.endswith('.fzz'):
             # Use gunzip rather than uncompress as latter insists filename end with ".Z"
-            self.file = subprocess.Popen(['gunzip', '-c', self.filename], stdout=subprocess.PIPE).stdout
+            self.file_subprocess = subprocess.Popen(['gunzip', '-c', self.filename], stdout=subprocess.PIPE)
+            self.file = self.file_subprocess.stdout
         else:
             self.file = open(self.filename, 'rb')
         self.saved_pdata = b''
@@ -272,10 +275,11 @@ class FZReader:
             self.file.close()
         if self.vstream is not sys.stdout:
             self.vstream.close()
-        if isinstance(self.file, subprocess.Popen):
-            self.file.wait() # I ain't afraid of no Zombie
+        if self.file_subprocess:
+            self.file_subprocess.wait() # I ain't afraid of no Zombie
         self.vstream = sys.stdout
         self.file = None
+        self.file_subprocess = None
 
     def __iter__(self):
         """
