@@ -273,7 +273,7 @@ class FZReader:
         if self.vstream is not sys.stdout:
             self.vstream.close()
         if isinstance(self.file, subprocess.Popen):
-            self.file.terminate()
+            self.file.wait()
         self.vstream = sys.stdout
         self.file = None
 
