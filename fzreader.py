@@ -88,7 +88,7 @@ def get_camera_geometry_by_nadc(n):
         json_path = os.path.join(module_dir, 'whipple_cams.json')
         with open(json_path, 'r') as f:
             _camera_cache = json.load(f)
-    return _camera_cache.get(str((nadc+11)//12*12))
+    return _camera_cache.get(str((n+11)//12*12))
 
 def get_year_by_run_number(run_number):
     data = [ [     0,    0,     0 ], # Test runs have MJD=0

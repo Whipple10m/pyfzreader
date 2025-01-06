@@ -1,6 +1,6 @@
 # pyfzreader
 
-Python reader of Whipple 10m `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on a few hundred files taken between 1995 and 2011, but should hopefully work for all runs from this time period. If you find an error while processing a file, please contact me, and I'll try to update the code to resolve the error.
+Python reader of Whipple 10m `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (GRANITE) into Python dictionaries. It has been tested on more than 20,000 files taken between 1995 and 2011, and works for the vast majority of them. In certain cases (about 1% of runs) the data file is truncated or malformed (e.g. it may originally have been transferred from the data acquisition system in ASCII mode) and the reader may raise `EOFError` or `FZDecodeError`. If you find an error while processing a file, please contact me, and I can check if there is a problem with the data file and/or whether it is possible to update the code to resolve the error.
 
 See [Kildea et al., Astroparticle Physics, 28, 2, 182-195, (2007)](https://www.sciencedirect.com/science/article/abs/pii/S0927650507000746) for details of the Whipple 10m system (camera, telescope, DAQ) during the period from 1997-2006, after the so-called GRANITE upgrade program. The article is also [available from its author](https://kildealab.com/publication/elsevier13/elsevier13.pdf) (last downloaded 2024-11-19).
 
@@ -63,9 +63,9 @@ where we have also used the `fzreader.is_pedestal_event(record)` function to rep
 
 ## Generating images of events
 
-The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all events in a given `fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. For simplicity, it only supports the 490 pixel camera.
+The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all events in a given `fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. The notebook supports all Whipple cameras from the GRANITE epoch.
 
-![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00211.png)
+![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00049.png)
 
 ## Format of data records
 
