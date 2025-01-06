@@ -65,7 +65,7 @@ where we have also used the `fzreader.is_pedestal_event(record)` function to rep
 
 The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all events in a given `fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. The notebook supports all Whipple cameras from the GRANITE epoch.
 
-![Images of an muon events in various Whipple camera.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/muon_images.png)
+![Images of muon events in various Whipple camera.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/muon_images.png)
 
 ## Format of data records
 
@@ -223,7 +223,7 @@ A set of scalers and GPS timestamping systems were used to measure the live time
 
 A 10MHz clock, derived locally from a frequency generator, was counted by two 48-bit scalers. The first was gated by the global veto, providing a running estimate of the total livetime in the run, available as `'livetime_sec'` and `'livetime_ns'` in the dictionary for the `event` and `frame` records. The second was an ungated count of the oscillator, providing the total elapsed time since the start of the run, only available for starting from GDF version 74, corresponding to run number 9042, and available as `'elaptime_sec'` and `'elaptime_sec'` in the record dictionary. The first step of any analysis was usually to calibrate the 10MHz oscillator frequency against the GPS system using the one-pulse per second (1PPS) markers from the GPS.
 
-Three different absolute GPS timestamping systems were used during the GRANITE epoch, two based on a Truetime GPS clock (initally XL-DC then XL-AK), and the third a dedicated Hytec timestamp module.
+Three different absolute GPS timestamping systems were used during the GRANITE epoch, two based on a Truetime GPS clock (initially XL-DC then XL-AK), and the third a dedicated Hytec timestamp module.
 
 1. Before the 1997 observing season, i.e. up until approximately September 1997, and corresponding to run numbers less than approximately 9000 or GDF versions before 80, the Truetime XL-DC was read out by a set of CAMAC modules known as the `Michigan` clock interface, and described by [Freeman and Akerlof, NIM A320, 305-309, 1992](https://deepblue.lib.umich.edu/bitstream/handle/2027.42/29901/0000258.pdf). The GPS time was provided by the XL-DC over a 48-bit wide parallel port, with quarter millisecond resolution, and digitized by a CAMAC module, from which three 16-bit values are stored in the GDF record. The system provided a BCD coded UTC time in hours, minutes, seconds and milliseconds, a quarter millisecond count, the day of the year (DOY), and some status bits.
 
