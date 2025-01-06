@@ -173,7 +173,7 @@ The [GDF tracking-record structure](https://github.com/Whipple10m/GDF/blob/24572
 - `'target_ra_hours'`: right-ascension of target in hours from 0.0 to 24.0.
 - `'target_ra_hms_str'`: right-ascension of target as printable string in format `'HHhMMmSS.Ss'`, e.g. `'12h34m56.7s'`.
 - `'target_dec_deg'`: declination of target in degrees from -90.0 to +90.0.
-- `'target_dec_dms_str'`: declination of target as printable string in format `'+/-DDDdMMmSS.Ss'`, e.g. `'+12h34m56.7s'`.
+- `'target_dec_dms_str'`: declination of target as printable string in format `'+/-DDdMMmSSs'`, e.g. `'+12h34m56.7s'`.
 - `'telescope_az_deg'`: telescope azimuth angle in degrees.
 - `'telescope_el_deg'`: telescope elevation angle in degrees.
 - `'tracking_error_deg'`: estimated error between target and telescope in degrees.
