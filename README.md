@@ -67,6 +67,8 @@ The Python notebook `Draw events.pynb` gives an example of how to use the reader
 
 ![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00049.png)
 
+![Image of an event in the Whipple 331 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt013167_ev02831.png)
+
 ## Format of data records
 
 The following types of data records are supported by the reader and decoded into a Python dictionary: `Run Header`, `10m event`, `HV measurement`, `Tracking status`, and `10m frame`. In addition, `CCD data` records are recognized by the reader but no data is decoded, and a minimal dictionary is returned as described below. All other records result in the return of a dictionary with the following elements:
