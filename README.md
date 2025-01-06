@@ -65,9 +65,7 @@ where we have also used the `fzreader.is_pedestal_event(record)` function to rep
 
 The Python notebook `Draw events.pynb` gives an example of how to use the reader to render events in a camera view. The notebook first loops through all events in a given `fz` file to calculate the mean pedestal in each channel, then reopens the file drawing the signal in each channel as a camera view. The notebook supports all Whipple cameras from the GRANITE epoch.
 
-![Image of an event in the Whipple 490 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt014862_ev00049.png)
-
-![Image of an event in the Whipple 331 pixel camera, possibly a muon.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/gt013167_ev02831.png)
+![Images of an muon events in various Whipple camera.](https://github.com/Whipple10m/pyfzreader/blob/main/Assets/muon_images.png)
 
 ## Format of data records
 
