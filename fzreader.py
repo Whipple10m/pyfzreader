@@ -38,6 +38,7 @@ import re
 import bz2
 import gzip
 import subprocess
+import lzma
 import json
 
 _camera_cache = None
@@ -244,7 +245,9 @@ class FZReader:
             FZReader: The FZReader object.
         """
         self.file_subprocess = None
-        if self.filename.endswith('.bz2'):
+        if self.filename.endswith('.xz'):
+            self.file = lzma.open(self.filename, 'rb')
+        elif self.filename.endswith('.bz2'):
             self.file = bz2.open(self.filename, 'rb')
         elif self.filename.endswith('.gz') or self.filename.endswith('.fzg'):
             self.file = gzip.open(self.filename, 'rb')
@@ -416,7 +419,7 @@ class FZReader:
         DSS = 0
         NDW = len(udata)//4
         if(len(udata) != NDW*4):
-            raise FZDecodeError(f'ZEBRA user data is not multiple of wordsize: {len(udata)} != {NUW*4}. PH start byte: {self.ph_start_byte}.')
+            raise FZDecodeError(f'ZEBRA user data is not multiple of wordsize: {len(udata)} != {NDW*4}. PH start byte: {self.ph_start_byte}.')
 
         DSS, user_header = self._decode_sequence(NWUH, 'UH', DSS, NDW, udata)
         _, runno = user_header
