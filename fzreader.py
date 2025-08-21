@@ -187,9 +187,24 @@ class FZReader:
 
     Methods:
         read(): Read the next record from the file.
+        filename(): Get the name of the file being read.
+        run_number(): Get the run number of the file being read.
+        nominal_year(): Get the nominal year based on the run number 
+            of the file being read.
+        nominal_year_start_mjd(): Get the MJD in Jan 1 of the nominal 
+            year based on the run number of the file being read.
+        run_number_mismatches(): Get the number of run number mismatches 
+            in packet headers found in the file.
+        num_bytes_read(): Get the number of bytes read from the file.
+        num_packets_found(): Get the number of packet headers found in 
+            the file.
+        last_packet_header_start_byte(): Get the start byte of the last 
+            packet header found in the file.
 
     Attributes:
-        filename (str): The name of the FZ file to read. This can be 
+        filename_or_fzdatafile (str or FZDataFile): The name of the FZ file 
+            to read or an FZDataFile instance corresponding to a file 
+            downloaded from the FZArchive. The filename can be 
             bzip2 (.bz2), gzip (.gz or .fzg), LZW (.Z or .fzz), or 
             uncompressed (any other extension).
         verbose (bool): If True, print verbose output, primarily for 
@@ -205,7 +220,9 @@ class FZReader:
         Initialize the FZReader.
 
         Args:
-            filename (str): The name of the FZ file to read. This can be 
+            filename_or_fzdatafile (str or FZDataFile): The name of the FZ file 
+                to read or an FZDataFile instance corresponding to a file 
+                downloaded from the FZArchive. The filename can be 
                 bzip2 (.bz2), gzip (.gz or .fzg), LZW (.Z or .fzz), or 
                 uncompressed (any other extension).
             verbose (bool): If True, print verbose output, primarily for 
@@ -1232,44 +1249,104 @@ class FZReader:
         NFIRST, record = self._unpack_gdf_header(data, 'ccd')
         return record
 
+
 class FZDataFile:
+    """Class representing a single data file in the FZ Data Archive.
+    This class encapsulates the metadata and methods to access the compressed
+    and uncompressed data of a file in the FZ Data Archive. It provides methods
+    to retrieve the filename, date path, full path, compressed data, uncompressed
+    data, and a stream for reading the uncompressed data. It also allows saving
+    the file to a specified path."""
     def __init__(self, filename: str, date_path: str, full_path: str, data: bytes):
+        """Initializes the FZDataFile with the given parameters.
+        Args:
+            filename (str): The name of the file.
+            date_path (str): The date path of the file.
+            full_path (str): The full path to the file.
+            data (bytes): The compressed data of the file in xz format.
+        """
         self._filename = filename
         self._date_path = date_path
         self._full_path = full_path
         self._data = data  # compressed bytes (xz)
 
     def filename(self) -> str:
+        """Returns the name of the file.
+        Returns:
+            The name of the file in the format 'gtNNNNNN.fz.xz'.
+        """
         return self._filename
 
     def date_path(self) -> str:
+        """Returns the date path of the file.
+        Returns:
+            The date path is in the format 'dYYYYMMDD'.
+        """
         return self._date_path
 
     def full_path(self) -> str:
+        """Returns the full path to the file.
+        Returns:
+            The full path to the file, which is a combination of the date path
+            and the filename : 'raw10/dYYYYMMDD/gtNNNNNN.fz.xz'.
+        """
         return self._full_path
 
     def compressed_data(self) -> bytes:
+        """Returns the compressed data of the file.
+        Returns:
+            The compressed data in xz format as bytes.
+        """
         return self._data
 
     def uncompressed_data(self) -> bytes:
+        """Returns the uncompressed data of the file.
+        Returns:
+            The uncompressed data as bytes after decompressing the xz format.
+        """
         return lzma.decompress(self._data)
 
     def stream(self) -> io.BufferedReader:
+        """Returns a stream for reading the uncompressed data.
+        Returns:
+            A BufferedReader stream that allows reading the uncompressed data
+            from the xz compressed bytes.
+        """
         return io.BufferedReader(io.BytesIO(lzma.decompress(self._data)))
 
     def save(self, path: Optional[str] = None):
+        """Saves the file to the specified path or the original filename.
+        Args:
+            path (Optional[str]): The path where the file should be saved.
+                If None, it saves to the original filename.
+        """
         outpath = path or self._filename
         with open(outpath, 'wb') as f:
             f.write(self._data)
 
 
 class FZDataArchive:
+    """Class to access the FZ Data Archive from Zenodo or Harvard Dataverse.
+    
+    This class provides methods to download and access data files from the 
+    FZ Data Archive. It supports two providers: Zenodo and Harvard Dataverse.
+    The archive contains compressed data files in xz format, which can be 
+    decompressed and accessed using the provided methods."""
+
     PROVIDERS = {
         "zenodo": "https://zenodo.org/records/16890876/files/index.json?download=1",
         "harvard": "https://dataverse.harvard.edu/api/access/datafile/11973690"
     }
 
     def __init__(self, provider: str, verbose: bool = False, headers: Optional[Dict[str, str]] = None):
+        """Initializes the FZDataArchive with the specified provider.
+        Args:
+            provider (str): The data provider, either 'zenodo' or 'harvard'.
+            verbose (bool): If True, enables verbose logging.
+            headers (Optional[Dict[str, str]]): Additional headers to include in requests.
+        Raises:
+            ValueError: If the provider is not supported.
+        """
         if provider not in self.PROVIDERS:
             raise ValueError(f"Unsupported provider: {provider}")
         self.provider = provider
@@ -1328,7 +1405,14 @@ class FZDataArchive:
         return list(self.filemap.keys())
 
     def download_file_from_archive(self, filename: str):
-        """Downloads a specific file from the archive."""
+        """Downloads a specific file from the archive.
+        Args:
+            filename (str): The name of the file to download.
+        Returns:
+            bytes: The content of the downloaded file.
+        Raises:
+            FileNotFoundError: If the file is not found in the index.
+        """
         return _load_file(filename)
 
     def _load_file(self, filename: str) -> bytes:
@@ -1398,7 +1482,14 @@ class FZDataArchive:
         return runs_by_date
 
     def run_path_for_number(self, runnum: str) -> str:
-        """Returns the file path for a given run number."""
+        """Returns the file path for a given run number.
+        Args:
+            runnum (str): The run number as a string.
+        Returns:
+            str: The file path for the run number.
+        Raises:
+            FileNotFoundError: If the run number is not found in the index.
+        """
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
@@ -1406,14 +1497,27 @@ class FZDataArchive:
         return entry["filename"]
 
     def compressed_size_for_run_path(self, path: str) -> int:
-        """Returns the size of the run file for a given run path."""
+        """Returns the size of the run file for a given run path.
+        Args:
+            path (str): The file path of the run.
+        Returns:
+            int: The size of the run file in bytes.
+        Raises:
+            FileNotFoundError: If the run path is not found in the index.
+        """
         entry = next((e for e in self.index if e["filename"] == path), None)
         if not entry:
             raise FileNotFoundError(path)
         return entry["size"]
 
     def compressed_size_for_run_number(self, runnum: str) -> int:
-        """Returns the size of the run file for a given run number."""
+        """Returns the size of the run file for a given run number.
+        Args:
+            runnum (str): The run number as a string.
+        Returns:
+            int: The size of the run file in bytes.
+        Raises:
+            FileNotFoundError: If the run number is not found in the index."""
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
@@ -1421,14 +1525,28 @@ class FZDataArchive:
         return entry["size"]
 
     def get_run_by_path(self, path: str) -> FZDataFile:
-        """Download the run for a given run path."""
+        """Download the run for a given run path.
+        Args:
+            path (str): The file path of the run.
+        Returns:
+            FZDataFile: An instance of FZDataFile containing the run data.
+        Raises:
+            FileNotFoundError: If the run path is not found in the index.
+        """
         entry = next((e for e in self.index if e["filename"] == path), None)
         if not entry:
             raise FileNotFoundError(path)
         return self._fetch_run(entry)
 
     def get_run_by_number(self, runnum: str) -> FZDataFile:
-        """Download the run for a given run number."""
+        """Download the run for a given run number.
+        Args:
+            runnum (str): The run number as a string.
+        Returns:
+            FZDataFile: An instance of FZDataFile containing the run data.
+        Raises:
+            FileNotFoundError: If the run number is not found in the index.
+        """
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
