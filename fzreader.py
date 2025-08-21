@@ -1233,11 +1233,17 @@ class FZDataFile:
     def filename(self) -> str:
         return self._filename
 
-    def utc_path(self) -> str:
+    def date_path(self) -> str:
         return self._date_path
 
     def full_path(self) -> str:
         return self._full_path
+
+    def compressed_data(self) -> bytes:
+        return self._data
+
+    def uncompressed_data(self) -> bytes:
+        return lzma.decompress(self._data)
 
     def stream(self) -> io.BufferedReader:
         return io.BufferedReader(io.BytesIO(lzma.decompress(self._data)))
@@ -1389,6 +1395,21 @@ class FZDataArchive:
             raise FileNotFoundError(f"Run {runnum} not found")
         entry = self.runmap[runnum_key]
         return entry["filename"]
+
+    def compressed_size_for_run_path(self, path: str) -> int:
+        """Returns the size of the run file for a given run path."""
+        entry = next((e for e in self.index if e["filename"] == path), None)
+        if not entry:
+            raise FileNotFoundError(path)
+        return entry["size"]
+
+    def compressed_size_for_run_number(self, runnum: str) -> int:
+        """Returns the size of the run file for a given run number."""
+        runnum_key = str(int(runnum))  # normalize to int string
+        if runnum_key not in self.runmap:
+            raise FileNotFoundError(f"Run {runnum} not found")
+        entry = self.runmap[runnum_key]
+        return entry["size"]
 
     def get_run_by_path(self, path: str) -> FZDataFile:
         """Download the run for a given run path."""
