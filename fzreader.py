@@ -199,7 +199,7 @@ class FZReader:
         resynchronise_header (bool): If True, resynchronise the header.
     """
 
-    def __init__(self, filename, verbose=False, verbose_file=None, 
+    def __init__(self, filename_or_fzdatafile, verbose=False, verbose_file=None, 
                  unpack_all_values = False, resynchronise_header = False) -> None:
         """
         Initialize the FZReader.
@@ -217,7 +217,14 @@ class FZReader:
                 the values that are most relevant.
             resynchronise_header (bool): If True, resynchronise the header.
         """
-        self.filename = filename
+        if isinstance(filename_or_fzdatafile, str):
+            self.filename = filename_or_fzdatafile
+            self.fzdatafile = None
+        elif isinstance(filename, FZDataFile):
+            self.filename = filename_or_fzdatafile.filename()
+            self.fzdatafile = filename_or_fzdatafile
+        else:
+            raise TypeError('filename_or_fzdatafile must be a string or FZDataFile instance')
         if(not filename):
             raise RuntimeError('No filename given')
         self.runno = 0
@@ -250,7 +257,9 @@ class FZReader:
             FZReader: The FZReader object.
         """
         self.file_subprocess = None
-        if self.filename.endswith('.xz'):
+        if self.fzdatafile:
+            self.file = self.fzdatafile.stream()
+        elif self.filename.endswith('.xz'):
             self.file = lzma.open(self.filename, 'rb')
         elif self.filename.endswith('.bz2'):
             self.file = bz2.open(self.filename, 'rb')
