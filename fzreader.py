@@ -1361,6 +1361,17 @@ class FZDataArchive:
         """Returns a list of all run paths available in the archive."""
         return [entry["filename"] for entry in self.index]
 
+    def list_run_numbers_by_date(self) -> Dict[str, List[int]]:
+        """Returns a dictionary mapping date paths to lists of run paths."""
+        runs_by_date = {}
+        for entry in self.index:
+            date_path = entry["filename"].split('/')[-2]
+            if date_path not in runs_by_date:
+                runs_by_date[date_path] = []
+            runnum = entry["filename"].split("gt")[-1].split(".")[0].lstrip("0") or "0"
+            runs_by_date[date_path].append(int(runnum))
+        return runs_by_date
+
     def list_run_paths_by_date(self) -> Dict[str, List[str]]:
         """Returns a dictionary mapping date paths to lists of run paths."""
         runs_by_date = {}
