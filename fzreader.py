@@ -42,6 +42,7 @@ import subprocess
 import lzma
 import json
 import csv
+import random
 import urllib.request
 import http.cookiejar
 from typing import Dict, List, Optional
@@ -1338,7 +1339,7 @@ class FZDataArchive:
         "harvard": "https://dataverse.harvard.edu/api/access/datafile/11973690"
     }
 
-    def __init__(self, provider: str, verbose: bool = False, headers: Optional[Dict[str, str]] = None):
+    def __init__(self, provider: str = "", verbose: bool = False, headers: Optional[Dict[str, str]] = None):
         """Initializes the FZDataArchive with the specified provider.
         Args:
             provider (str): The data provider, either 'zenodo' or 'harvard'.
@@ -1347,8 +1348,11 @@ class FZDataArchive:
         Raises:
             ValueError: If the provider is not supported.
         """
+        if not provider:
+            provider = random.choice(list(self.PROVIDERS.keys()))
+        provider = provider.lower()
         if provider not in self.PROVIDERS:
-            raise ValueError(f"Unsupported provider: {provider}")
+            raise ValueError(f"Unsupported provider: {provider} (choose from {list(self.PROVIDERS.keys())})")
         self.provider = provider
         self.verbose = verbose
         self.headers = headers or {}
