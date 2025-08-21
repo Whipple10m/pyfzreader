@@ -41,6 +41,7 @@ import gzip
 import subprocess
 import lzma
 import json
+import csv
 import urllib.request
 import http.cookiejar
 from typing import Dict, List, Optional
