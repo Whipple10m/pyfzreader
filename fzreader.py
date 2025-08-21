@@ -31,6 +31,7 @@ Read Whipple 10m data in GDF/ZEBRA format into Python.
 """
 
 import os
+import io
 import struct
 import time
 import sys
@@ -40,6 +41,9 @@ import gzip
 import subprocess
 import lzma
 import json
+import urllib.request
+import http.cookiejar
+from typing import Dict, List, Optional
 
 _camera_cache = None
 
@@ -1217,6 +1221,184 @@ class FZReader:
     def _decode_cccc(self, NDW, data):
         NFIRST, record = self._unpack_gdf_header(data, 'ccd')
         return record
+
+class FZDataFile:
+    def __init__(self, filename: str, date_path: str, full_path: str, data: bytes):
+        self._filename = filename
+        self._date_path = date_path
+        self._full_path = full_path
+        self._data = data  # compressed bytes (xz)
+
+    def filename(self) -> str:
+        return self._filename
+
+    def utc_path(self) -> str:
+        return self._date_path
+
+    def full_path(self) -> str:
+        return self._full_path
+
+    def stream(self) -> io.BufferedReader:
+        return io.BufferedReader(io.BytesIO(lzma.decompress(self._data)))
+
+    def save(self, path: Optional[str] = None):
+        outpath = path or self._filename
+        with open(outpath, 'wb') as f:
+            f.write(self._data)
+
+
+class FZDataArchive:
+    PROVIDERS = {
+        "zenodo": "https://zenodo.org/records/16890876/files/index.json?download=1",
+        "harvard": "https://dataverse.harvard.edu/api/access/datafile/11973690"
+    }
+
+    def __init__(self, provider: str, verbose: bool = False, headers: Optional[Dict[str, str]] = None):
+        if provider not in self.PROVIDERS:
+            raise ValueError(f"Unsupported provider: {provider}")
+        self.provider = provider
+        self.verbose = verbose
+        self.headers = headers or {}
+        self.filemap = {}  # archive -> URL
+        self.metadata = {}
+        self.index = []  # list of entries from CSV
+        self.runmap = {}  # run_number -> entry
+
+        # Shared opener with redirect + cookies + headers
+        self._cookiejar = http.cookiejar.CookieJar()
+        self._opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self._cookiejar),
+            urllib.request.HTTPRedirectHandler()
+        )
+        base_headers = {"User-Agent": "Mozilla/5.0 (FZDataArchive)"}
+        all_headers = {**base_headers, **self.headers}
+        self._opener.addheaders = list(all_headers.items())
+
+        self._load_index()
+        self._load_csv()
+
+    def _log(self, msg: str):
+        if self.verbose:
+            print(f"[FZDataArchive] {msg}")
+
+    def _request(self, url: str, range_header: Optional[str] = None):
+        req = urllib.request.Request(url)
+        if range_header:
+            req.add_header("Range", range_header)
+        return self._opener.open(req)
+
+    def _load_index(self):
+        url = self.PROVIDERS[self.provider]
+        self._log(f"Downloading index.json from {url}")
+        with self._request(url) as resp:
+            data = resp.read()
+        index = json.loads(data.decode('utf-8'))
+
+        dataset = index.get("dataset", {})
+        files = index.get("files", [])
+
+        self.filemap = {f["filename"]: f["url"] for f in files}
+        self.metadata = {
+            "title": dataset.get("title", ""),
+            "doi": dataset.get("doi", ""),
+            "provider": dataset.get("source_name", self.provider),
+            "record_id": dataset.get("record_id", ""),
+            "doi_url": dataset.get("doi_url", ""),
+            "url": dataset.get("url", "")
+        }
+
+    def list_files_in_archive(self) -> List[str]:
+        """Returns a list of all files available in the archive."""
+        return list(self.filemap.keys())
+
+    def download_file_from_archive(self, filename: str):
+        """Downloads a specific file from the archive."""
+        return _load_file(filename)
+
+    def _load_file(self, filename: str) -> bytes:
+        if filename not in self.filemap:
+            raise FileNotFoundError(f"File {filename} not found in index.json")
+        url = self.filemap[filename]
+        self._log(f"Downloading {filename} from {url}")
+        with self._request(url) as resp:
+            return resp.read()
+
+    def _load_csv(self):
+        compressed = self._load_file("raw10_index.csv.xz")
+        csv_bytes = lzma.decompress(compressed)
+        reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
+
+        total_size = 0
+        seen_runs = set()
+        for row in reader:
+            archive = row["archive"]
+            filename = row["filename"]
+            # Extract run number as integer string (remove leading zeros)
+            runnum = filename.split("gt")[-1].split(".")[0].lstrip("0") or "0"
+            size = int(row["size"])
+            total_size += size
+            entry = {
+                "archive": archive,
+                "filename": filename,
+                "offset": int(row["data_offset"]),
+                "size": size,
+            }
+            self.index.append(entry)
+            if runnum not in seen_runs:
+                self.runmap[runnum] = entry
+                seen_runs.add(runnum)
+
+        # Always print two-line header
+        print(f"{self.metadata['title']}")
+        print(f"{self.metadata['provider']} ({self.metadata['doi']}) | Runs: {len(self.runmap)} | Total size: {total_size/1e9:.2f} GB")
+
+    def list_run_numbers(self) -> List[int]:
+        """Returns a list of all run numbers available in the archive."""
+        return sorted(int(run) for run in self.runmap.keys())
+
+    def list_run_paths(self) -> List[str]:
+        """Returns a list of all run paths available in the archive."""
+        return [entry["filename"] for entry in self.index]
+
+    def list_run_paths_by_date(self) -> Dict[str, List[str]]:
+        """Returns a dictionary mapping date paths to lists of run paths."""
+        runs_by_date = {}
+        for entry in self.index:
+            date_path = split('/',entry["filename"])[-2]
+            if date_path not in runs_by_date:
+                runs_by_date[date_path] = []
+            runs_by_date[date_path].append(entry["filename"])
+        return runs_by_date
+
+    def get_run_by_path(self, path: str) -> FZDataFile:
+        entry = next((e for e in self.index if e["filename"] == path), None)
+        if not entry:
+            raise FileNotFoundError(path)
+        return self._fetch_run(entry)
+
+    def get_run_by_number(self, runnum: str) -> FZDataFile:
+        runnum_key = str(int(runnum))  # normalize to int string
+        if runnum_key not in self.runmap:
+            raise FileNotFoundError(f"Run {runnum} not found")
+        return self._fetch_run(self.runmap[runnum_key])
+
+    def _fetch_run(self, entry: Dict) -> FZDataFile:
+        archive = entry["archive"]
+        url = self.filemap[archive]
+        offset = entry["offset"]
+        size = entry["size"]
+        end = offset + size - 1
+        self._log(f"Fetching {entry['filename']} from {archive} [{offset}-{end}]")
+
+        with self._request(url, range_header=f"bytes={offset}-{end}") as resp:
+            data = resp.read()
+
+        filename = os.path.basename(entry["filename"])
+        date_path = os.path.basename(os.path.dirname(entry["filename"]))
+        full_path = entry["filename"]
+
+        return FZDataFile(filename, date_path, full_path, data)
+
 
 if __name__ == '__main__':
     import json
