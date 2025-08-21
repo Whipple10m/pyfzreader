@@ -220,17 +220,17 @@ class FZReader:
         if isinstance(filename_or_fzdatafile, str):
             self.filename = filename_or_fzdatafile
             self.fzdatafile = None
-        elif isinstance(filename, FZDataFile):
+        elif isinstance(filename_or_fzdatafile, FZDataFile):
             self.filename = filename_or_fzdatafile.filename()
             self.fzdatafile = filename_or_fzdatafile
         else:
             raise TypeError('filename_or_fzdatafile must be a string or FZDataFile instance')
-        if(not filename):
+        if(not self.filename):
             raise RuntimeError('No filename given')
         self.runno = 0
         self.nominal_year = 0
         self.nominal_year_mjd = 0
-        match = re.search(r"gt(\d+)", filename)
+        match = re.search(r"gt(\d+)", self.filename)
         if match:
             self.runno = int(match.group(1))
             self.nominal_year, self.nominal_year_mjd = get_year_by_run_number(self.runno)
