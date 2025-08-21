@@ -1350,8 +1350,8 @@ class FZDataArchive:
                 seen_runs.add(runnum)
 
         # Always print two-line header
-        print(f"{self.metadata['title']}")
-        print(f"{self.metadata['provider']} ({self.metadata['doi']}) | Runs: {len(self.runmap)} | Total size: {total_size/1e9:.2f} GB")
+        print(f"Archive: {self.metadata['title']}")
+        print(f"Provider: {self.metadata['provider']} ({self.metadata['doi']}) | Runs: {len(self.runmap)} files / {total_size/1e9:.2f} GB")
 
     def list_run_numbers(self) -> List[int]:
         """Returns a list of all run numbers available in the archive."""
@@ -1365,19 +1365,29 @@ class FZDataArchive:
         """Returns a dictionary mapping date paths to lists of run paths."""
         runs_by_date = {}
         for entry in self.index:
-            date_path = split('/',entry["filename"])[-2]
+            date_path = entry["filename"].split('/')[-2]
             if date_path not in runs_by_date:
                 runs_by_date[date_path] = []
             runs_by_date[date_path].append(entry["filename"])
         return runs_by_date
 
+    def run_path_for_number(self, runnum: str) -> str:
+        """Returns the file path for a given run number."""
+        runnum_key = str(int(runnum))  # normalize to int string
+        if runnum_key not in self.runmap:
+            raise FileNotFoundError(f"Run {runnum} not found")
+        entry = self.runmap[runnum_key]
+        return entry["filename"]
+
     def get_run_by_path(self, path: str) -> FZDataFile:
+        """Download the run for a given run path."""
         entry = next((e for e in self.index if e["filename"] == path), None)
         if not entry:
             raise FileNotFoundError(path)
         return self._fetch_run(entry)
 
     def get_run_by_number(self, runnum: str) -> FZDataFile:
+        """Download the run for a given run number."""
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
