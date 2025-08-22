@@ -1411,7 +1411,7 @@ class FZDataArchive:
     def download_file_from_archive(self, filename: str):
         """Downloads a specific file from the archive.
         Args:
-            filename (str): The name of the file to download.
+                       filename (str): The name of the file to download.
         Returns:
             bytes: The content of the downloaded file.
         Raises:
@@ -1584,10 +1584,31 @@ class FZDataArchive:
         csv_bytes = lzma.decompress(compressed)
         reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
         run_summary_database = []
+
+        # Define sets of column names for each type
+        int_cols = {'run_number', 'gdf_version', 'nheader', 'nevent',
+            'nframe', 'ntracking', 'nhv', 'nccd', 'nadc',
+            'gps_not_good', 'ut_max', 'ut_min', 'nsky', 'npedestal',
+            'bytes_read' }
+        float_cols = {'mjd', 'mjd_max', 'mjd_min', 'el_max', 'el_min',
+            'ped', 'ped_rms' }
+
         for row in reader:
-            entry = dict(row)
+            entry = {}
+            for k, v in row.items():
+                if k in int_cols:
+                    entry[k] = int(v) if v else None
+                elif k in float_cols:
+                    entry[k] = float(v) if v else None
+                else:
+                    entry[k] = v
+            if entry['utc_max'] and entry['utc_min']:
+                entry['duration'] = entry['utc_max']-entry['utc_min']
+            else:
+                entry['duration'] = None
             run_summary_database.append(entry)
         return run_summary_database
+    
 
 
 if __name__ == '__main__':
