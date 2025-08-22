@@ -1336,7 +1336,7 @@ class FZDataArchive:
 
     PROVIDERS = {
         "zenodo": "https://zenodo.org/records/16890876/files/index.json?download=1",
-        "harvard": "https://dataverse.harvard.edu/api/access/datafile/11987455"
+        "harvard": "https://dataverse.harvard.edu/api/access/datafile/11987462"
     }
 
     def __init__(self, provider: str = "", verbose: bool = False, headers: Optional[Dict[str, str]] = None):
