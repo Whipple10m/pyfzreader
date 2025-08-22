@@ -1336,7 +1336,7 @@ class FZDataArchive:
 
     PROVIDERS = {
         "zenodo": "https://zenodo.org/records/16890876/files/index.json?download=1",
-        "harvard": "https://dataverse.harvard.edu/api/access/datafile/11973690"
+        "harvard": "https://dataverse.harvard.edu/api/access/datafile/11987455"
     }
 
     def __init__(self, provider: str = "", verbose: bool = False, headers: Optional[Dict[str, str]] = None):
@@ -1572,6 +1572,22 @@ class FZDataArchive:
         full_path = entry["filename"]
 
         return FZDataFile(filename, date_path, full_path, data)
+
+    def get_run_summary_database(self) -> List[Dict]:
+        """Returns the full run information database as a list of dictionaries.
+        Each dictionary contains metadata about a run, including archive, filename,
+        offset, and size.
+        Returns:
+            List[Dict]: A list of dictionaries containing run information.
+        """
+        compressed = self._load_file("raw10_run_summary.csv.xz")
+        csv_bytes = lzma.decompress(compressed)
+        reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
+        run_summary_database = []
+        for row in reader:
+            entry = dict(row)
+            run_summary_database.append(entry)
+        return run_summary_database
 
 
 if __name__ == '__main__':
