@@ -1602,8 +1602,8 @@ class FZDataArchive:
                     entry[k] = float(v) if v else None
                 else:
                     entry[k] = v
-            if entry['utc_max'] and entry['utc_min']:
-                entry['duration'] = entry['utc_max']-entry['utc_min']
+            if entry['ut_max'] and entry['ut_min']:
+                entry['duration'] = entry['ut_max']-entry['ut_min']
             else:
                 entry['duration'] = None
             run_summary_database.append(entry)
