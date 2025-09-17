@@ -1336,7 +1336,7 @@ class FZDataArchive:
 
     PROVIDERS = {
         "zenodo": "https://zenodo.org/records/16890876/files/index.json?download=1",
-        "harvard": "https://dataverse.harvard.edu/api/access/datafile/12076462"
+        "harvard": "https://dataverse.harvard.edu/api/access/datafile/12076466"
     }
 
     def __init__(self, provider: str = "", verbose: bool = False, headers: Optional[Dict[str, str]] = None):
@@ -1609,7 +1609,34 @@ class FZDataArchive:
             run_summary_database.append(entry)
         return run_summary_database
     
+    def get_logsheet_database(self) -> List[Dict]:
+        """Returns the full logsheet database as a list of dictionaries.
+        Each dictionary contains metadata about a run, extracted from the logsheet
+        written by the observers.
+        Returns:
+            List[Dict]: A list of dictionaries containing log sheet information for each run.
+        """
+        compressed = self._load_file("logsheet_database.csv.xz")
+        csv_bytes = lzma.decompress(compressed)
+        reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
+        logsheet_database = []
 
+        # Define sets of column names for each type
+        int_cols = {'run num', 'duration', 'n2 run', 'off run'}
+        float_cols = {'elevation'}
+
+        for row in reader:
+            entry = {}
+            for k, v in row.items():
+                k = k.tolower()
+                if k in int_cols:
+                    entry[k] = int(v) if v else None
+                elif k in float_cols:
+                    entry[k] = float(v) if v else None
+                else:
+                    entry[k] = v
+            logsheet_database.append(entry)
+        return logsheet_database
 
 if __name__ == '__main__':
     import json
