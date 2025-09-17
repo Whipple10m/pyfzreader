@@ -1628,7 +1628,7 @@ class FZDataArchive:
         for row in reader:
             entry = {}
             for k, v in row.items():
-                k = k.tolower()
+                k = k.lower()
                 if k in int_cols:
                     entry[k] = int(v) if v else None
                 elif k in float_cols:
