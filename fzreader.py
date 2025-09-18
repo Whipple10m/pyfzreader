@@ -1664,10 +1664,19 @@ class FZDataArchive:
             logsheet_database.append(entry)
         return logsheet_database
 
+    def list_logsheets(self) -> List[str]:
+        """Returns a list of all dates for which logsheet entries are available.
+        Returns:
+            List[str]: A list of dates in 'YYYYMMDD' format.
+        """
+        if not self.logindex:
+            self._load_log_index_csv()
+        return sorted(self.logmap.keys())
+
     def get_logsheet_by_date(self, utdate: str) -> str:
         """Returns the logsheet entry for a given date.
         Args:
-            utdate (str): The date in 'YYYYMMDD' format.
+            utdate (str): The date in 'YYYYMMDD' or 'YYYY-MM-DD' format.
         Returns:
             str: The logsheet entry as a string.
         Raises:
@@ -1675,6 +1684,7 @@ class FZDataArchive:
         """
         if not self.logindex:
             self._load_log_index_csv()
+        ut.date.replace("-", "")
         if utdate not in self.logmap:
             raise FileNotFoundError(f"Logsheet for date {utdate} not found")
         entry = self.logmap[utdate]
