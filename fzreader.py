@@ -1358,8 +1358,10 @@ class FZDataArchive:
         self.headers = headers or {}
         self.filemap = {}  # archive -> URL
         self.metadata = {}
-        self.index = []  # list of entries from CSV
+        self.index = []  # list of entries from run index CSV
         self.runmap = {}  # run_number -> entry
+        self.logindex = []  # list of entries from log index CSV
+        self.logmap = {}  # utdate -> entry
 
         # Shared opener with redirect + cookies + headers
         self._cookiejar = http.cookiejar.CookieJar()
@@ -1372,7 +1374,7 @@ class FZDataArchive:
         self._opener.addheaders = list(all_headers.items())
 
         self._load_index()
-        self._load_csv()
+        self._load_run_index_csv()
 
     def _log(self, msg: str):
         if self.verbose:
@@ -1427,8 +1429,28 @@ class FZDataArchive:
         with self._request(url) as resp:
             return resp.read()
 
-    def _load_csv(self):
+    def _load_run_index_csv(self):
         compressed = self._load_file("raw10_index.csv.xz")
+        csv_bytes = lzma.decompress(compressed)
+        reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
+
+        for row in reader:
+            archive = row["archive"]
+            filename = row["filename"]
+            # Extract utdate as string
+            utdate = filename.split("d")[-1].split(".")[0] or "0"
+            size = int(row["size"])
+            entry = {
+                "archive": archive,
+                "filename": filename,
+                "offset": int(row["data_offset"]),
+                "size": size,
+            }
+            self.logindex.append(entry)
+            self.logmap[utdate] = entry
+
+    def _load_log_index_csv(self):
+        compressed = self._load_file("log10_index.csv.xz")
         csv_bytes = lzma.decompress(compressed)
         reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
 
@@ -1540,7 +1562,7 @@ class FZDataArchive:
         entry = next((e for e in self.index if e["filename"] == path), None)
         if not entry:
             raise FileNotFoundError(path)
-        return self._fetch_run(entry)
+        return self._fetch_file_from_tar_archive(entry)
 
     def get_run_by_number(self, runnum: str) -> FZDataFile:
         """Download the run for a given run number.
@@ -1554,9 +1576,9 @@ class FZDataArchive:
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
-        return self._fetch_run(self.runmap[runnum_key])
+        return self._fetch_file_from_tar_archive(self.runmap[runnum_key])
 
-    def _fetch_run(self, entry: Dict) -> FZDataFile:
+    def _fetch_file_from_tar_archive(self, entry: Dict) -> FZDataFile:
         archive = entry["archive"]
         url = self.filemap[archive]
         offset = entry["offset"]
@@ -1637,6 +1659,23 @@ class FZDataArchive:
                     entry[k] = v
             logsheet_database.append(entry)
         return logsheet_database
+
+    def get_logsheet_by_date(self, utdate: str) -> str:
+        """Returns the logsheet entry for a given date.
+        Args:
+            utdate (str): The date in 'YYYYMMDD' format.
+        Returns:
+            str: The logsheet entry as a string.
+        Raises:
+            FileNotFoundError: If the logsheet for the given date is not found.
+        """
+        if not self.logindex:
+            self._load_log_index_csv()
+        if utdate not in self.logmap:
+            raise FileNotFoundError(f"Logsheet for date {utdate} not found")
+        entry = self.logmap[utdate]
+        data = self._fetch_file_from_tar_archive(entry)
+        return data.decode('utf-8')
 
 if __name__ == '__main__':
     import json
