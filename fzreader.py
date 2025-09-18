@@ -1429,8 +1429,8 @@ class FZDataArchive:
         with self._request(url) as resp:
             return resp.read()
 
-    def _load_run_index_csv(self):
-        compressed = self._load_file("raw10_index.csv.xz")
+    def _load_log_index_csv(self):
+        compressed = self._load_file("log10_index.csv.xz")
         csv_bytes = lzma.decompress(compressed)
         reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
 
@@ -1449,8 +1449,8 @@ class FZDataArchive:
             self.logindex.append(entry)
             self.logmap[utdate] = entry
 
-    def _load_log_index_csv(self):
-        compressed = self._load_file("log10_index.csv.xz")
+    def _load_run_index_csv(self):
+        compressed = self._load_file("raw10_index.csv.xz")
         csv_bytes = lzma.decompress(compressed)
         reader = csv.DictReader(io.StringIO(csv_bytes.decode('utf-8')))
 
