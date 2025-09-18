@@ -1562,7 +1562,7 @@ class FZDataArchive:
         entry = next((e for e in self.index if e["filename"] == path), None)
         if not entry:
             raise FileNotFoundError(path)
-        return self._fetch_file_from_tar_archive(entry)
+        return self._fetch_fzdatafile_from_tar_archive(entry)
 
     def get_run_by_number(self, runnum: str) -> FZDataFile:
         """Download the run for a given run number.
@@ -1576,9 +1576,9 @@ class FZDataArchive:
         runnum_key = str(int(runnum))  # normalize to int string
         if runnum_key not in self.runmap:
             raise FileNotFoundError(f"Run {runnum} not found")
-        return self._fetch_file_from_tar_archive(self.runmap[runnum_key])
+        return self._fetch_fzdatafile_from_tar_archive(self.runmap[runnum_key])
 
-    def _fetch_file_from_tar_archive(self, entry: Dict) -> FZDataFile:
+    def _fetch_data_from_tar_archive(self, entry: Dict) -> FZDataFile:
         archive = entry["archive"]
         url = self.filemap[archive]
         offset = entry["offset"]
@@ -1588,7 +1588,11 @@ class FZDataArchive:
 
         with self._request(url, range_header=f"bytes={offset}-{end}") as resp:
             data = resp.read()
+        
+        return data
 
+    def _fetch_fzdatafile_from_tar_archive(self, entry: Dict) -> FZDataFile:
+        data = self._fetch_data_from_tar_archive(entry)
         filename = os.path.basename(entry["filename"])
         date_path = os.path.basename(os.path.dirname(entry["filename"]))
         full_path = entry["filename"]
@@ -1674,7 +1678,7 @@ class FZDataArchive:
         if utdate not in self.logmap:
             raise FileNotFoundError(f"Logsheet for date {utdate} not found")
         entry = self.logmap[utdate]
-        data = self._fetch_file_from_tar_archive(entry)
+        data = self._fetch_data_from_tar_archive(entry)
         return data.decode('utf-8')
 
 if __name__ == '__main__':
