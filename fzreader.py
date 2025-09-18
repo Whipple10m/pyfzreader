@@ -1684,7 +1684,7 @@ class FZDataArchive:
         """
         if not self.logindex:
             self._load_log_index_csv()
-        ut.date.replace("-", "")
+        utdate.replace("-", "")
         if utdate not in self.logmap:
             raise FileNotFoundError(f"Logsheet for date {utdate} not found")
         entry = self.logmap[utdate]
