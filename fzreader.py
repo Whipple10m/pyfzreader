@@ -1635,12 +1635,12 @@ class FZDataArchive:
             run_summary_database.append(entry)
         return run_summary_database
 
-    def get_run_summary_database_as_dict(self) -> Dict[Dict]:
+    def get_run_summary_database_as_dict(self) -> Dict[int, Dict]:
         """Returns the full run information database as a dictionary of dictionaries.
         Each key is the run number, and each value is a dictionary containing metadata
         about the run, including archive, filename, offset, and size.
         Returns:
-            Dict[Dict]: A dictionary mapping run numbers to their corresponding
+            Dict[int, Dict]: A dictionary mapping run numbers to their corresponding
                 run information dictionaries.
         """
         run_summary_list = self.get_run_summary_database()
