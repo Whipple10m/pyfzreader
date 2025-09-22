@@ -1634,7 +1634,18 @@ class FZDataArchive:
                 entry['duration'] = None
             run_summary_database.append(entry)
         return run_summary_database
-    
+
+    def get_run_summary_database_as_dict(self) -> Dict[Dict]:
+        """Returns the full run information database as a dictionary of dictionaries.
+        Each key is the run number, and each value is a dictionary containing metadata
+        about the run, including archive, filename, offset, and size.
+        Returns:
+            Dict[Dict]: A dictionary mapping run numbers to their corresponding
+                run information dictionaries.
+        """
+        run_summary_list = self.get_run_summary_database()
+        return { int(entry['run_number']): entry for entry in run_summary_list if 'run_number' in entry }
+
     def get_logsheet_database(self) -> List[Dict]:
         """Returns the full logsheet database as a list of dictionaries.
         Each dictionary contains metadata about a run, extracted from the logsheet
