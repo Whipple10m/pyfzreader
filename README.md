@@ -1,5 +1,7 @@
 # pyfzreader
 
+**New in 2025:** The Whipple data from 1995 to 2011 is available publicly from a repository hosted both on the [Harvard dataverse (DOI:10.7910/DVN/VSXO03)](https://doi.org/10.7910/DVN/VSXO03) and on [Zenodo (DOI:10.5281/zenodo.16890875)](https://doi.org/10.5281/zenodo.16890875).
+
 Python reader of Whipple 10m `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (`Granite`) into Python dictionaries. It has been tested on more than 20,000 files taken between 1995 and 2011, and works for the vast majority of them. In certain cases (less than 3% of runs) the data file is truncated or malformed (e.g. it may originally have been transferred from the data acquisition system in ASCII mode) and the reader may raise `EOFError` or `FZDecodeError`. If you find an error while processing a file, please contact me, and I can check if there is a problem with the data file and/or whether it is possible to update the code to resolve the error.
 
 See [Kildea et al., Astroparticle Physics, 28, 2, 182-195, (2007)](https://www.sciencedirect.com/science/article/abs/pii/S0927650507000746) for details of the Whipple 10m system (camera, telescope, DAQ) during the period from 1997-2006, after the so-called GRANITE upgrade program. The article is also [available from its author](https://kildealab.com/publication/elsevier13/elsevier13.pdf) (last downloaded 2024-11-19).
@@ -42,7 +44,7 @@ This file can then be read into Python. For example, a crude script to calculate
 
 ### Integrated directly into your analysis scripts
 
-The library can be used to read `fz` files directly, skipping the conversion to JSON. For example, the script above can be rewritten as:
+The library can be used to read locally hosted `fz` files directly, skipping the conversion to JSON. For example, the script above can be rewritten as:
 
     import fzreader
     import numpy
@@ -60,6 +62,27 @@ The library can be used to read `fz` files directly, skipping the conversion to 
     ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
 
 where we have also used the `fzreader.is_pedestal_event(record)` function to replace the three-part test in the previous version.
+
+### Using the public data archive  hosted on the Harvard dataverse or Zenodo
+
+The library can read raw data files and logsheets directly from either of the public Whipple repositories. For example, the script above can be adapted to use the Zenodo archive:
+
+    import fzreader
+    import numpy
+    nped = 0
+    ped_sum = 0
+    ped_sum_sq = 0
+    archive = fzreader.FZDataArchive('zenodo', verbose=True) # can also choose 'harvard'
+    fzdata = archive.get_run_by_number(12345)
+    with fzreader.FZReader(fzdata) as fz:
+        for r in fz:
+            if fzreader.is_pedestal_event(r):
+                adc = numpy.asarray(r['adc_values'])
+                nped += 1
+                ped_sum = numpy.add(adc, ped_sum)
+                ped_sum_sq = numpy.add(adc**2, ped_sum_sq)
+    ped_val = ped_sum/nped
+    ped_rms = numpy.sqrt(ped_sum_sq/nped - ped_val**2)
 
 ## Generating images of events
 
