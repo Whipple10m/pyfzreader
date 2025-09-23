@@ -14,6 +14,7 @@ There are two ways to use the reader: as a library which allows you to read and 
 
 The library can open `fz` files stored as:
 
+- LZMA: with the extension of `.fz.xz`, using the Python `lzma` package that is part of the Python Standard Library,
 - BZIP2: with the extension of `.fz.bz2`, using the Python `bz2` package that is part of the Python Standard Library,
 - GZIP: with the extension of `.fz.gz`, or `.fzg`, using the Python `gzip` package that is part of the Python Standard Library,
 - LZW (UNIX) compress: with the extension of `.fz.Z`, or `.fzz` using the `gunzip` application as a sub-process,
