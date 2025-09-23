@@ -1,7 +1,7 @@
 # pyfzreader
 
 > [!NOTE]
-> **New in September 2025:** The Whipple data from 1995 to 2011 has been released publicly, and can be downloaded from the Harvard dataverse ([DOI:10.7910/DVN/VSXO03](https://doi.org/10.7910/DVN/VSXO03)) or from Zenodo ([DOI:10.5281/zenodo.16890875](https://doi.org/10.5281/zenodo.16890875)).
+> **New in September 2025:** The Whipple data from 1995 to 2011 has been released publicly on the Harvard dataverse ([DOI:10.7910/DVN/VSXO03](https://doi.org/10.7910/DVN/VSXO03)) and on Zenodo ([DOI:10.5281/zenodo.16890875](https://doi.org/10.5281/zenodo.16890875)). The reader can download data on-the-fly from either of these archives, as described below.
 
 Python reader of Whipple 10m `GDF/ZEBRA` files, also known as `fz` files. This reader extracts the data written by the Whipple data acquisition system (`Granite`) into Python dictionaries. It has been tested on more than 20,000 files taken between 1995 and 2011, and works for the vast majority of them. In certain cases (less than 3% of runs) the data file is truncated or malformed (e.g. it may originally have been transferred from the data acquisition system in ASCII mode) and the reader may raise `EOFError` or `FZDecodeError`. If you find an error while processing a file, please contact me, and I can check if there is a problem with the data file and/or whether it is possible to update the code to resolve the error.
 
