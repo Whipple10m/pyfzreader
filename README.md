@@ -9,6 +9,17 @@ See [Kildea et al., Astroparticle Physics, 28, 2, 182-195, (2007)](https://www.s
 
 The reader does not depend on any of the CERNLIB system, or on any nonstandard Python packages. The data is extracted by decoding the ZEBRA physical, logical, and data-bank structures directly using the Python `struct` package. 
 
+## Installation
+
+The package can be installed using `pip`, either from a locally from a checkout:
+```
+$ pip install .
+```
+or from GitHub directly:
+```
+$ pip install "fzreader @ git+https://github.com/Whipple10m/pyfzreader"
+```
+
 ## Usage
 
 There are two ways to use the reader: as a library which allows you to read and process data from `fz` files in your own Python scripts / Jupyter notebooks, or as a script to convert `fz` files into JSON format that can be read by any system that can process JSON.
@@ -23,9 +34,9 @@ The library can open `fz` files stored as:
 
 ### As a standalone JSON converter
 
-To convert a file `gt012345.fz.bz2` into JSON you can invoke `fzreader.py` directly as:
+To convert a file `gt012345.fz.bz2` into JSON you can invoke `fzreader` as:
 
-    python3 fzreader.py -o gt012345.json gt012345.fz.bz2
+    python3 -m fzreader -o gt012345.json gt012345.fz.bz2
 
 This file can then be read into Python. For example, a crude script to calculate the pedestals and pedestal variances from pedestal events in the run is:
 
