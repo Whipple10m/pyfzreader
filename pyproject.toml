@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fzreader"
+version = "1.0.1"
+requires-python = ">=3.9"
+description = "Python reader of Whipple 10m GDF/ZEBRA files"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Stephen Fegan", email = "sfegan@gmail.com" }]
+
+[project.scripts]
+fzreader = "fzreader.__main__:main"
+
+[tool.setuptools]
+packages = ["fzreader"]
+
+[tool.setuptools.package-data]
+fzreader = ["whipple_cams.json"]
